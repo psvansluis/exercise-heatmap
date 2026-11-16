@@ -1,1 +1,3 @@
 assets/export_*.zip
+/target/
+/crates/app/dist/

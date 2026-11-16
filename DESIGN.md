@@ -213,9 +213,11 @@ Street coverage can vary with OSM completeness and tagging. A regional score mus
 
 Implement in this order, preserving usable increments.
 
-### Phase 0 — Foundation
+### Phase 0 — Foundation and first GitHub Pages release
 
-Set up Cargo workspace, Leptos CSR, WASM build, static hosting path, map bridge, basic responsive shell, and build/CI checks. **Checkpoint:** app builds as static assets; map renders and pans; no activity data is sent to the host. Trunk and GitHub Pages are recommendations, pending repository/hosting confirmation.
+Set up the Cargo workspace, Leptos client-side rendering (CSR), WASM build, MapLibre bridge, and a responsive landing page. Add a GitHub Actions workflow that builds the static single-page application, packages the generated site as a Pages artifact, and deploys it to GitHub Pages on pushes to the default branch; pull requests should run the build without deploying. Configure the repository Pages source to GitHub Actions and grant the workflow only the permissions needed to publish. Use Trunk as the proposed Rust/WASM build tool, subject to confirming the repository setup.
+
+**Phase 0 is complete when the landing page is publicly visible at the repository’s GitHub Pages URL after a successful Actions deployment.** The deployed output must be static and require no application backend. Confirm the Pages project-site base path, asset/WASM URLs, and SPA navigation behavior so the page also works when the repository is hosted below the account root. The map bridge and map rendering can be added in this phase, but are not prerequisites for the landing-page deployment milestone.
 
 ### Phase 1 — Activity explorer and local data
 
@@ -281,7 +283,7 @@ The confirmed privacy boundary is “no personal activity data reaches the stati
 | IndexedDB Rust interface | Wrapper ergonomics, transaction semantics, and WASM support differ. | Prototype atomic batch import and backup with candidate wrapper vs a tiny JS adapter; select the thinnest maintainable boundary. |
 | OSM map tile/style provider | Public OSM tile server has policy limits; vector providers have different cost/privacy terms. | Select before public launch based on attribution, terms, privacy, reliability, and expected traffic. |
 | Coverage tolerance and eligible network | GPS precision and OSM tagging change the score. | Build a small labeled evaluation area; tune thresholds and report uncertainty before presenting a percentage. |
-| Build/deployment choice | GitHub Pages and Trunk were suggested but not explicitly confirmed. | Verify repository hosting/URL constraints, especially SPA asset paths and WASM MIME configuration. |
+| GitHub Pages SPA path and build configuration | GitHub Pages and a GitHub Actions deployment pipeline are confirmed; project sites are hosted below the account root and Rust/WASM output needs correct asset paths and MIME handling. | In Phase 0, build and deploy a landing-page SPA through Actions; verify the repository base path, generated asset/WASM URLs, direct navigation behavior, and Pages configuration. Keep Trunk as the proposed build tool until the repository build proves it fits. |
 
 Garmin Personal API remains a future investigation. Direct browser integration may encounter CORS, credential, authentication, and provider-policy constraints; no design should assume that a token alone makes it safe or possible. Reassess only after MVP and verify current official provider requirements at that time.
 
@@ -339,3 +341,4 @@ Garmin Personal API remains a future investigation. Direct browser integration m
 ## 15. MVP exit criteria
 
 The MVP is ready for broader use when a user can import the supplied archive types supported by the chosen parser path, review warnings, store hundreds of activities locally, see routes for the visible map range, filter/select activities, export a portable backup, restore it without data loss, and confirm by network inspection that no activity data reaches the application host or external map requests. Street coverage is a later phase and must be labeled approximate until validated against known cases.
+
