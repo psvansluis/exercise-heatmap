@@ -22,4 +22,3 @@ console_error_panic_hook = "0.1"
 wasm-bindgen = "0.2"
 wasm-bindgen-test = "0.3"
 web-sys = { version = "0.3", features = ["Document", "Window"] }
-
