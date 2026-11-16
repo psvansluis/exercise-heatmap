@@ -7,6 +7,12 @@ mod pages;
 
 use crate::pages::home::Home;
 
+#[cfg(feature = "github-pages")]
+const ROUTER_BASE: &str = "/exercise-heatmap";
+
+#[cfg(not(feature = "github-pages"))]
+const ROUTER_BASE: &str = "/";
+
 #[component]
 pub fn App() -> impl IntoView {
     provide_meta_context();
@@ -17,7 +23,7 @@ pub fn App() -> impl IntoView {
         <Meta charset="UTF-8" />
         <Meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-        <Router>
+        <Router base=ROUTER_BASE>
             <Routes fallback=|| view! { NotFound }>
                 <Route path=path!("/") view=Home />
             </Routes>
