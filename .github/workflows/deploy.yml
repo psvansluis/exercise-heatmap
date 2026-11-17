@@ -27,7 +27,7 @@ jobs:
 
       - name: Build for GitHub Pages
         working-directory: crates/app
-        run: trunk build --release --features github-pages --locked
+        run: trunk build --release --locked
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
@@ -49,3 +49,4 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+

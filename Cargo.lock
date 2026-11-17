@@ -373,11 +373,14 @@ version = "0.1.0"
 dependencies = [
  "console_error_panic_hook",
  "console_log",
+ "js-sys",
  "leptos",
  "leptos_meta",
  "leptos_router",
  "log",
+ "send_wrapper",
  "wasm-bindgen",
+ "wasm-bindgen-futures",
  "wasm-bindgen-test",
  "web-sys",
 ]

@@ -7,11 +7,8 @@ mod pages;
 
 use crate::pages::home::Home;
 
-#[cfg(feature = "github-pages")]
+// Match the project-site path in both local development and GitHub Pages.
 const ROUTER_BASE: &str = "/exercise-heatmap";
-
-#[cfg(not(feature = "github-pages"))]
-const ROUTER_BASE: &str = "/";
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -30,3 +27,4 @@ pub fn App() -> impl IntoView {
         </Router>
     }
 }
+
