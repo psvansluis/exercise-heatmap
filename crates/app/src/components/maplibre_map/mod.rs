@@ -1,15 +1,12 @@
 use leptos::prelude::*;
-use serde::Serialize;
-use serde_wasm_bindgen::Serializer;
-use wasm_bindgen::JsValue;
 
 mod adapter;
 mod lifecycle;
 mod options;
 mod status;
 
-use adapter::{AdapterReason, await_api_2, remove_map};
-pub use options::MapOptions;
+use adapter::Map;
+use options::MapOptions;
 use status::{MapStatus, unavailable_message};
 
 const DEFAULT_CENTER: [f64; 2] = [4.895, 52.37];
@@ -21,9 +18,8 @@ const DEFAULT_TILE_ATTRIBUTION: &str = "© <a href=\"https://www.openstreetmap.o
 const DEFAULT_TILE_SERVICE_LABEL: &str = "OpenStreetMap";
 const DEFAULT_LOAD_TIMEOUT_MS: u32 = 15_000;
 
-// Leptos owns the MapLibre instance lifetime, the map configuration, and all
-// UI state; the JavaScript adapter provides the renderer-specific calls that
-// cross the WebAssembly boundary and never touches the DOM itself.
+// Leptos owns the map's lifetime, configuration, and all UI state; the
+// modules below own the renderer bridge and the load lifecycle.
 #[component]
 pub fn MapLibreMap(
     /// Center of the map as `[longitude, latitude]`.
@@ -56,30 +52,21 @@ pub fn MapLibreMap(
         let handle = handle.clone();
 
         move |container| {
-            let container: JsValue = container.into();
             let handle = handle.clone();
             let options = options.clone();
 
             leptos::task::spawn_local(async move {
                 status.set(MapStatus::Loading);
 
-                match create_map(&container, &options).await {
-                    Ok(map) if !map.is_null() && !map.is_undefined() => {
-                        if handle.is_cancelled() {
-                            // The map was created after teardown; nothing was
-                            // stored, so remove the fresh instance directly.
-                            remove_map(&map);
-                        } else {
-                            handle.store(map.clone());
-                            lifecycle::watch_map_load(&map, status, handle, load_timeout_ms);
-                        }
+                match Map::create(container, &options).await {
+                    Ok(map) if handle.is_cancelled() => map.remove(),
+                    Ok(map) => {
+                        handle.store(map.clone());
+                        lifecycle::watch_map_load(map, status, handle, load_timeout_ms);
                     }
-                    Ok(_) => {}
-                    Err(error) if !handle.is_cancelled() => {
-                        let reason = AdapterReason::from_js(&error);
+                    Err(reason) => {
                         status.set(MapStatus::Unavailable(unavailable_message(reason)));
                     }
-                    Err(_) => {}
                 }
             });
         }
@@ -142,13 +129,4 @@ pub fn MapLibreMap(
             </div>
         </section>
     }
-}
-
-/// Hands the container and serialized options to the JS adapter.
-async fn create_map(container: &JsValue, options: &MapOptions) -> Result<JsValue, JsValue> {
-    // MapLibre's style validator needs plain objects, not ES Maps.
-    let serialized = options
-        .serialize(&Serializer::new().serialize_maps_as_objects(true))
-        .map_err(|error| JsValue::from_str(&error.to_string()))?;
-    await_api_2("createMap", container, &serialized).await
 }
