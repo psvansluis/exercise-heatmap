@@ -1,10 +1,4 @@
-use std::{
-    cell::{Cell, RefCell},
-    rc::Rc,
-};
-
 use leptos::prelude::*;
-use send_wrapper::SendWrapper;
 use serde::Serialize;
 use serde_wasm_bindgen::Serializer;
 use wasm_bindgen::JsValue;
@@ -14,7 +8,7 @@ mod lifecycle;
 mod options;
 mod status;
 
-use adapter::{await_api_2, failure_reason, remove_map};
+use adapter::{AdapterReason, await_api_2, remove_map};
 pub use options::MapOptions;
 use status::{MapStatus, unavailable_message};
 
@@ -53,20 +47,17 @@ pub fn MapLibreMap(
 ) -> impl IntoView {
     let map_container = NodeRef::<leptos::html::Div>::new();
     let status = RwSignal::new(MapStatus::Starting);
-    let cancelled = SendWrapper::new(Rc::new(Cell::new(false)));
-    let map_instance = SendWrapper::new(Rc::new(RefCell::new(None::<JsValue>)));
+    let handle = lifecycle::MapHandle::new();
 
     let options =
         MapOptions::openstreetmap(center, zoom, min_zoom, max_zoom, tile_url, tile_attribution);
 
     map_container.on_load({
-        let cancelled = cancelled.clone();
-        let map_instance = map_instance.clone();
+        let handle = handle.clone();
 
         move |container| {
             let container: JsValue = container.into();
-            let cancelled = cancelled.clone();
-            let map_instance = map_instance.clone();
+            let handle = handle.clone();
             let options = options.clone();
 
             leptos::task::spawn_local(async move {
@@ -74,25 +65,19 @@ pub fn MapLibreMap(
 
                 match create_map(&container, &options).await {
                     Ok(map) if !map.is_null() && !map.is_undefined() => {
-                        if cancelled.get() {
+                        if handle.is_cancelled() {
+                            // The map was created after teardown; nothing was
+                            // stored, so remove the fresh instance directly.
                             remove_map(&map);
                         } else {
-                            *map_instance.borrow_mut() = Some(map.clone());
-                            lifecycle::watch_map_load(
-                                &map,
-                                status,
-                                cancelled,
-                                map_instance,
-                                load_timeout_ms,
-                            );
+                            handle.store(map.clone());
+                            lifecycle::watch_map_load(&map, status, handle, load_timeout_ms);
                         }
                     }
                     Ok(_) => {}
-                    Err(error) if !cancelled.get() => {
-                        let reason = failure_reason(&error);
-                        status.set(MapStatus::Unavailable(unavailable_message(
-                            reason.as_deref(),
-                        )));
+                    Err(error) if !handle.is_cancelled() => {
+                        let reason = AdapterReason::from_js(&error);
+                        status.set(MapStatus::Unavailable(unavailable_message(reason)));
                     }
                     Err(_) => {}
                 }
@@ -100,17 +85,7 @@ pub fn MapLibreMap(
         }
     });
 
-    on_cleanup({
-        let cancelled = cancelled.clone();
-        let map_instance = map_instance.clone();
-
-        move || {
-            cancelled.set(true);
-            if let Some(map) = map_instance.borrow_mut().take() {
-                remove_map(&map);
-            }
-        }
-    });
+    on_cleanup(move || handle.dispose());
 
     let ready_label = tile_service_label.clone();
 

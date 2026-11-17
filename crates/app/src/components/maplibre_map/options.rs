@@ -88,3 +88,99 @@ pub struct RasterLayer {
     pub minzoom: u8,
     pub maxzoom: u8,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::MapOptions;
+    use serde::Serialize;
+    use serde_wasm_bindgen::Serializer;
+    use wasm_bindgen::JsValue;
+    use wasm_bindgen_test::*;
+
+    use crate::components::maplibre_map::adapter;
+
+    fn sample() -> MapOptions {
+        MapOptions::openstreetmap(
+            [4.895, 52.37],
+            10.0,
+            2.0,
+            19.0,
+            "https://tile.openstreetmap.org/{z}/{x}/{y}.png".to_string(),
+            "© OpenStreetMap contributors".to_string(),
+        )
+    }
+
+    /// Mirrors the serialization in `create_map`.
+    fn to_js(options: &MapOptions) -> JsValue {
+        options
+            .serialize(&Serializer::new().serialize_maps_as_objects(true))
+            .expect("MapOptions must serialize to a JsValue")
+    }
+
+    #[wasm_bindgen_test]
+    fn sources_serialize_as_plain_object() {
+        let style = js_sys::Reflect::get(&to_js(&sample()), &"style".into()).unwrap();
+        let sources = js_sys::Reflect::get(&style, &"sources".into()).unwrap();
+        let json = js_sys::JSON::stringify(&sources)
+            .unwrap()
+            .as_string()
+            .expect("stringify returns a JS string");
+        // An ES Map stringifies to "{}" and MapLibre's style validator then
+        // fails with: layers[0]: source "openstreetmap" not found.
+        assert!(
+            json.contains("\"openstreetmap\""),
+            "sources must be a plain object, got: {json}"
+        );
+    }
+
+    #[wasm_bindgen_test]
+    fn keys_use_maplibre_camel_case() {
+        let json = js_sys::JSON::stringify(&to_js(&sample()))
+            .unwrap()
+            .as_string()
+            .expect("stringify returns a JS string");
+        for key in [
+            "center",
+            "zoom",
+            "minZoom",
+            "maxZoom",
+            "attributionControl",
+            "style",
+            "tileSize",
+        ] {
+            assert!(
+                json.contains(&format!("\"{key}\"")),
+                "missing {key}: {json}"
+            );
+        }
+    }
+
+    #[wasm_bindgen_test]
+    fn adapter_reasons_map_from_js_values() {
+        let with_reason = |reason: &str| {
+            let error = js_sys::Error::new(reason);
+            js_sys::Reflect::set(&error, &"reason".into(), &reason.into()).unwrap();
+            error.into()
+        };
+        assert_eq!(
+            adapter::AdapterReason::from_js(&with_reason("map-module")),
+            adapter::AdapterReason::Module
+        );
+        assert_eq!(
+            adapter::AdapterReason::from_js(&with_reason("map-init")),
+            adapter::AdapterReason::Init
+        );
+        assert_eq!(
+            adapter::AdapterReason::from_js(&with_reason("removed")),
+            adapter::AdapterReason::Removed
+        );
+        assert_eq!(
+            adapter::AdapterReason::from_js(&with_reason("who-knows")),
+            adapter::AdapterReason::Other
+        );
+        assert_eq!(
+            adapter::AdapterReason::from_js(&{ js_sys::Error::new("no reason").into() }),
+            adapter::AdapterReason::Other
+        );
+    }
+}

@@ -1,3 +1,5 @@
+use super::adapter::AdapterReason;
+
 /// Panel state, owned by the component and rendered entirely from Leptos.
 #[derive(Clone, PartialEq)]
 pub(crate) enum MapStatus {
@@ -16,12 +18,12 @@ const MSG_GENERIC: &str =
 pub(crate) const MSG_TILES: &str =
     "Map tiles have not arrived. Check your connection and reload the page.";
 
-/// Maps an adapter rejection reason (public/maplibre.js) to the panel's
-/// failure copy.
-pub(crate) fn unavailable_message(reason: Option<&str>) -> String {
+/// Maps an adapter rejection reason to the panel's failure copy.
+pub(crate) fn unavailable_message(reason: AdapterReason) -> String {
     match reason {
-        Some("map-module") => MSG_MODULE.to_string(),
-        Some("map-init") => MSG_INIT.to_string(),
-        _ => MSG_GENERIC.to_string(),
+        AdapterReason::Module => MSG_MODULE.to_string(),
+        AdapterReason::Init => MSG_INIT.to_string(),
+        // "removed" rejections come from cleanup paths that never surface copy.
+        AdapterReason::Removed | AdapterReason::Other => MSG_GENERIC.to_string(),
     }
 }

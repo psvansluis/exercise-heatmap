@@ -4,6 +4,31 @@ use wasm_bindgen_futures::JsFuture;
 
 const ADAPTER_GLOBAL: &str = "exerciseMapLibre";
 
+/// Why the adapter (public/maplibre.js) rejected a call. The adapter names
+/// these on `error.reason`; this enum is the typed Rust view of them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum AdapterReason {
+    /// The maplibre-gl module could not be fetched from the CDN.
+    Module,
+    /// The map could not be constructed in this browser.
+    Init,
+    /// A pending load was cancelled through `removeMap`.
+    Removed,
+    /// Anything else the adapter reports.
+    Other,
+}
+
+impl AdapterReason {
+    pub(crate) fn from_js(error: &JsValue) -> Self {
+        match failure_reason(error).as_deref() {
+            Some("map-module") => Self::Module,
+            Some("map-init") => Self::Init,
+            Some("removed") => Self::Removed,
+            _ => Self::Other,
+        }
+    }
+}
+
 pub(crate) fn maplibre_api() -> Result<JsValue, JsValue> {
     Reflect::get(&js_sys::global(), &JsValue::from_str(ADAPTER_GLOBAL))
 }
@@ -60,7 +85,7 @@ pub(crate) fn api_promise_2(
 
 /// The machine reason the adapter attached to a rejection
 /// (set on `error.reason` by public/maplibre.js).
-pub(crate) fn failure_reason(error: &JsValue) -> Option<String> {
+fn failure_reason(error: &JsValue) -> Option<String> {
     Reflect::get(error, &JsValue::from_str("reason"))
         .ok()
         .and_then(|value| value.as_string())

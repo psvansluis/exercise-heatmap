@@ -12,13 +12,51 @@ use super::{
     status::{MSG_TILES, MapStatus},
 };
 
+/// The component's two pieces of mutable shared state: whether the component
+/// was torn down, and the live map instance handed over by the renderer.
+#[derive(Clone)]
+pub(crate) struct MapHandle {
+    cancelled: SendWrapper<Rc<Cell<bool>>>,
+    map_instance: SendWrapper<Rc<RefCell<Option<JsValue>>>>,
+}
+
+impl MapHandle {
+    pub(crate) fn new() -> Self {
+        Self {
+            cancelled: SendWrapper::new(Rc::new(Cell::new(false))),
+            map_instance: SendWrapper::new(Rc::new(RefCell::new(None))),
+        }
+    }
+
+    /// Records the live map instance handed over by the renderer.
+    pub(crate) fn store(&self, map: JsValue) {
+        *self.map_instance.borrow_mut() = Some(map);
+    }
+
+    pub(crate) fn is_cancelled(&self) -> bool {
+        self.cancelled.get()
+    }
+
+    /// Cancels pending work and drops the stored map through the adapter.
+    pub(crate) fn dispose(&self) {
+        self.cancelled.set(true);
+        self.remove();
+    }
+
+    /// Drops the stored map (if any) through the adapter.
+    pub(crate) fn remove(&self) {
+        if let Some(map) = self.map_instance.borrow_mut().take() {
+            remove_map(&map);
+        }
+    }
+}
+
 /// Resolves the status to `Ready` once the renderer fires "load"; a watchdog
 /// turns a hung load into an error and tears the map down.
 pub(crate) fn watch_map_load(
     map: &JsValue,
     status: RwSignal<MapStatus>,
-    cancelled: SendWrapper<Rc<Cell<bool>>>,
-    map_instance: SendWrapper<Rc<RefCell<Option<JsValue>>>>,
+    handle: MapHandle,
     timeout_ms: u32,
 ) {
     let loaded = SendWrapper::new(Rc::new(Cell::new(false)));
@@ -27,17 +65,14 @@ pub(crate) fn watch_map_load(
     leptos::task::spawn_local({
         let loaded = loaded.clone();
         let timed_out = timed_out.clone();
-        let cancelled = cancelled.clone();
-        let map_instance = map_instance.clone();
-        let map = map.clone();
+        let handle = handle.clone();
 
         async move {
             let _ = timeout_future(timeout_ms).await;
-            if !loaded.get() && !cancelled.get() {
+            if !loaded.get() && !handle.is_cancelled() {
                 timed_out.set(true);
                 status.set(MapStatus::Unavailable(MSG_TILES.to_string()));
-                *map_instance.borrow_mut() = None;
-                remove_map(&map);
+                handle.remove();
             }
         }
     });
@@ -45,7 +80,7 @@ pub(crate) fn watch_map_load(
     leptos::task::spawn_local({
         let loaded = loaded.clone();
         let timed_out = timed_out.clone();
-        let cancelled = cancelled.clone();
+        let handle = handle.clone();
         let map = map.clone();
 
         async move {
@@ -54,7 +89,7 @@ pub(crate) fn watch_map_load(
                     loaded.set(true);
                     status.set(MapStatus::Ready);
                 }
-                Err(_) if !cancelled.get() && !loaded.get() && !timed_out.get() => {
+                Err(_) if !handle.is_cancelled() && !loaded.get() && !timed_out.get() => {
                     status.set(MapStatus::Unavailable(MSG_TILES.to_string()));
                     remove_map(&map);
                 }
