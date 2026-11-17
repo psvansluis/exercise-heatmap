@@ -1,121 +1,62 @@
+// Thin renderer adapter for MapLibre. All lifecycle, state, and messaging
+// lives in Rust (crates/app/src/components/maplibre_map.rs); this file only
+// knows how to construct and destroy a map instance.
 const maplibreModuleUrl =
   "https://unpkg.com/maplibre-gl@6.18.0/dist/maplibre-gl.mjs";
-const loadTimeouts = new WeakMap();
 
-function panelFor(container) {
-  return container.closest(".map-panel");
+// Map instance -> reject function of the outstanding mapLoaded() promise.
+// removeMap() settles these so a Rust-side timeout can break the load wait.
+const loadWaiters = new WeakMap();
+
+function mapError(reason) {
+  const error = new Error(`maplibre adapter failure: ${reason}`);
+  error.reason = reason;
+  return error;
 }
 
-function showLoading(panel) {
-  panel.querySelector("[data-map-status-text]").textContent = "Loading map";
-  const placeholder = panel.querySelector(".map-placeholder");
-  placeholder.hidden = false;
-  placeholder.querySelector(".map-placeholder-title").textContent =
-    "Loading the map";
-  placeholder.querySelector(".map-placeholder-copy").textContent =
-    "Connecting to the OpenStreetMap tile service…";
-}
-
-function showUnavailable(panel, message) {
-  panel.querySelector("[data-map-status-text]").textContent = "Map unavailable";
-  const placeholder = panel.querySelector(".map-placeholder");
-  placeholder.hidden = false;
-  placeholder.querySelector(".map-placeholder-title").textContent =
-    "The map could not load";
-  placeholder.querySelector(".map-placeholder-copy").textContent = message;
-}
-
-async function createMap(container) {
-  const panel = panelFor(container);
-  if (!panel) return null;
-  showLoading(panel);
-
+// options is a plain object produced in Rust (center, zoom, style, ...).
+async function createMap(container, options) {
   let maplibregl;
   try {
     maplibregl = await import(maplibreModuleUrl);
   } catch {
-    showUnavailable(
-      panel,
-      "MapLibre could not be loaded. Check your connection and reload the page.",
-    );
-    return null;
+    throw mapError("map-module");
   }
-  if (!container.isConnected) return null;
 
   try {
-    const map = new maplibregl.Map({
-      container,
-      center: [4.895, 52.37],
-      zoom: 10,
-      minZoom: 2,
-      maxZoom: 19,
-      style: {
-        version: 8,
-        sources: {
-          openstreetmap: {
-            type: "raster",
-            tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-            tileSize: 256,
-            attribution:
-              '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a>',
-          },
-        },
-        layers: [
-          {
-            id: "openstreetmap-raster",
-            type: "raster",
-            source: "openstreetmap",
-            minzoom: 0,
-            maxzoom: 19,
-          },
-        ],
-      },
-      attributionControl: { compact: true },
-    });
-
+    const map = new maplibregl.Map({ ...options, container });
     map.addControl(
       new maplibregl.NavigationControl({ showCompass: false }),
       "top-right",
     );
-
-    const loadTimeout = setTimeout(() => {
-      if (!map.loaded()) {
-        showUnavailable(
-          panel,
-          "Map tiles have not arrived. Check your connection and reload the page.",
-        );
-      }
-    }, 15000);
-    loadTimeouts.set(map, loadTimeout);
-
-    map.once("load", () => {
-      clearTimeout(loadTimeout);
-      loadTimeouts.delete(map);
-      panel.querySelector("[data-map-status-text]").textContent =
-        "OpenStreetMap";
-      panel.querySelector(".map-placeholder").hidden = true;
-    });
-
     return map;
   } catch {
-    showUnavailable(
-      panel,
-      "MapLibre could not be initialized in this browser. Check your connection and reload the page.",
-    );
-    return null;
+    throw mapError("map-init");
   }
 }
 
+// Resolves on the map's "load" event; rejects if removeMap() is called first.
+function mapLoaded(map) {
+  return new Promise((resolve, reject) => {
+    if (map.loaded()) {
+      resolve();
+      return;
+    }
+    loadWaiters.set(map, reject);
+    map.once("load", () => {
+      if (loadWaiters.get(map) === reject) loadWaiters.delete(map);
+      resolve();
+    });
+  });
+}
+
 function removeMap(map) {
-  const loadTimeout = loadTimeouts.get(map);
-  if (loadTimeout !== undefined) clearTimeout(loadTimeout);
-  loadTimeouts.delete(map);
+  const reject = loadWaiters.get(map);
+  if (reject !== undefined) {
+    loadWaiters.delete(map);
+    reject(mapError("removed"));
+  }
   map.remove();
 }
 
-function showError(container, message) {
-  const panel = panelFor(container);
-  if (panel) showUnavailable(panel, message);
-}
-
-globalThis.exerciseMapLibre = { createMap, removeMap, showError };
+globalThis.exerciseMapLibre = { createMap, mapLoaded, removeMap };
