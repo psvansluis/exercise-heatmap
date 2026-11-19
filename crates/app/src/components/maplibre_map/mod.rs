@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use leptos::prelude::*;
 
 mod adapter;
@@ -45,15 +47,21 @@ pub fn MapLibreMap(
     let status = RwSignal::new(MapStatus::Starting);
     let handle = lifecycle::MapHandle::new();
 
-    let options =
-        MapOptions::openstreetmap(center, zoom, min_zoom, max_zoom, tile_url, tile_attribution);
+    let options = Rc::new(MapOptions::openstreetmap(
+        center,
+        zoom,
+        min_zoom,
+        max_zoom,
+        tile_url,
+        tile_attribution,
+    ));
 
     map_container.on_load({
         let handle = handle.clone();
 
         move |container| {
             let handle = handle.clone();
-            let options = options.clone();
+            let options = Rc::clone(&options);
 
             leptos::task::spawn_local(async move {
                 status.set(MapStatus::Loading);

@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 
 /// Camera, controls, and style configuration for the map renderer.
-#[derive(Clone, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MapOptions {
     pub center: [f64; 2],
@@ -53,7 +53,7 @@ impl MapOptions {
     }
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AttributionControl {
     pub compact: bool,
@@ -61,7 +61,7 @@ pub struct AttributionControl {
 
 /// Mapbox GL style v8 document, restricted to the raster sources the heatmap
 /// currently uses.
-#[derive(Clone, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MapStyle {
     pub version: u8,
@@ -69,7 +69,7 @@ pub struct MapStyle {
     pub layers: Vec<RasterLayer>,
 }
 
-#[derive(Clone, Serialize)]
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TileSource {
     #[serde(rename = "type")]
