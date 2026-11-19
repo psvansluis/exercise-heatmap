@@ -24,10 +24,14 @@ pub(crate) enum AdapterReason {
 
 impl AdapterReason {
     pub(crate) fn from_js(error: &JsValue) -> Self {
-        match failure_reason(error).as_deref() {
-            Some("map-module") => Self::Module,
-            Some("map-init") => Self::Init,
-            Some("removed") => Self::Removed,
+        let Ok(reason) = Reflect::get(error, &JsValue::from_str("reason")) else {
+            return Self::Other;
+        };
+
+        match reason {
+            reason if reason == JsValue::from_str("map-module") => Self::Module,
+            reason if reason == JsValue::from_str("map-init") => Self::Init,
+            reason if reason == JsValue::from_str("removed") => Self::Removed,
             _ => Self::Other,
         }
     }
@@ -85,12 +89,6 @@ fn api_function(api: &JsValue, name: &str) -> Result<Function, JsValue> {
     Reflect::get(api, &JsValue::from_str(name))?.dyn_into::<Function>()
 }
 
-fn failure_reason(error: &JsValue) -> Option<String> {
-    Reflect::get(error, &JsValue::from_str("reason"))
-        .ok()
-        .and_then(|value| value.as_string())
-}
-
 /// Calls adapter API `name` with one argument, wraps the returned promise,
 /// and awaits it.
 async fn await_api_1(name: &str, arg: &JsValue) -> Result<JsValue, JsValue> {
@@ -133,4 +131,38 @@ pub(crate) fn timeout_future(ms: u32) -> JsFuture {
             let _ = set_timeout.call2(&js_sys::global(), &fire, &ms.into());
         }
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AdapterReason;
+    use wasm_bindgen::JsValue;
+    use wasm_bindgen_test::*;
+
+    #[wasm_bindgen_test]
+    fn adapter_reasons_map_from_js_values() {
+        let with_reason = |reason: &str| {
+            let error = js_sys::Error::new(reason);
+            js_sys::Reflect::set(&error, &"reason".into(), &reason.into()).unwrap();
+            error.into()
+        };
+        assert_eq!(
+            AdapterReason::from_js(&with_reason("map-module")),
+            AdapterReason::Module
+        );
+        assert_eq!(
+            AdapterReason::from_js(&with_reason("map-init")),
+            AdapterReason::Init
+        );
+        assert_eq!(
+            AdapterReason::from_js(&with_reason("removed")),
+            AdapterReason::Removed
+        );
+        assert_eq!(
+            AdapterReason::from_js(&with_reason("who-knows")),
+            AdapterReason::Other
+        );
+        let no_reason: JsValue = js_sys::Error::new("no reason").into();
+        assert_eq!(AdapterReason::from_js(&no_reason), AdapterReason::Other);
+    }
 }

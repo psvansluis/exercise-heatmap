@@ -50,6 +50,12 @@ impl MapHandle {
     }
 }
 
+impl Default for MapHandle {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Resolves the status to `Ready` once the renderer fires "load"; a watchdog
 /// turns a hung load into an error and tears the map down.
 pub(crate) fn watch_map_load(

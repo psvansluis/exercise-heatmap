@@ -97,8 +97,6 @@ mod tests {
     use wasm_bindgen::JsValue;
     use wasm_bindgen_test::*;
 
-    use crate::components::maplibre_map::adapter;
-
     fn sample() -> MapOptions {
         MapOptions::openstreetmap(
             [4.895, 52.37],
@@ -153,34 +151,5 @@ mod tests {
                 "missing {key}: {json}"
             );
         }
-    }
-
-    #[wasm_bindgen_test]
-    fn adapter_reasons_map_from_js_values() {
-        let with_reason = |reason: &str| {
-            let error = js_sys::Error::new(reason);
-            js_sys::Reflect::set(&error, &"reason".into(), &reason.into()).unwrap();
-            error.into()
-        };
-        assert_eq!(
-            adapter::AdapterReason::from_js(&with_reason("map-module")),
-            adapter::AdapterReason::Module
-        );
-        assert_eq!(
-            adapter::AdapterReason::from_js(&with_reason("map-init")),
-            adapter::AdapterReason::Init
-        );
-        assert_eq!(
-            adapter::AdapterReason::from_js(&with_reason("removed")),
-            adapter::AdapterReason::Removed
-        );
-        assert_eq!(
-            adapter::AdapterReason::from_js(&with_reason("who-knows")),
-            adapter::AdapterReason::Other
-        );
-        assert_eq!(
-            adapter::AdapterReason::from_js(&{ js_sys::Error::new("no reason").into() }),
-            adapter::AdapterReason::Other
-        );
     }
 }
