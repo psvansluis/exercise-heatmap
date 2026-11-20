@@ -1,4 +1,5 @@
 use chrono::{DateTime, NaiveDateTime, Utc};
+use csv::{ReaderBuilder, StringRecord};
 use exercise_domain::{ActivityId, ActivityType};
 
 #[derive(Clone, Debug)]
@@ -37,13 +38,37 @@ pub(crate) fn parse_csv(
 ) -> Result<Vec<Result<ActivityMetadata, MetadataRowError>>, String> {
     let text = std::str::from_utf8(bytes).map_err(|_| "activity CSV is not UTF-8".to_string())?;
     let text = text.trim_start_matches('\u{feff}');
-    let rows = parse_records(text)?;
-    let Some(headers) = rows.first() else {
+    let mut reader = ReaderBuilder::new()
+        .flexible(true)
+        .from_reader(text.as_bytes());
+    let headers = reader
+        .headers()
+        .map_err(|error| format!("could not read activity CSV headers: {error}"))?;
+    if headers.is_empty() {
         return Err("activity CSV is empty".into());
-    };
-    let headers: Vec<String> = headers.iter().map(|h| normalize_header(h)).collect();
+    }
+    let headers: Vec<String> = headers.iter().map(normalize_header).collect();
     let columns = metadata_columns(&headers)?;
-    Ok(parse_metadata_rows(&rows, &headers, &columns))
+    Ok(reader
+        .records()
+        .enumerate()
+        .filter_map(|(index, record)| {
+            let row_number = index + 2;
+            match record {
+                Ok(row) if row.iter().all(|field| field.trim().is_empty()) => None,
+                Ok(row) => Some(parse_activity_row(&row, headers.len(), &columns).map_err(
+                    |message| MetadataRowError {
+                        row_number,
+                        message,
+                    },
+                )),
+                Err(error) => Some(Err(MetadataRowError {
+                    row_number,
+                    message: error.to_string(),
+                })),
+            }
+        })
+        .collect())
 }
 
 fn metadata_columns(headers: &[String]) -> Result<MetadataColumns, String> {
@@ -84,33 +109,8 @@ fn metadata_columns(headers: &[String]) -> Result<MetadataColumns, String> {
     })
 }
 
-fn parse_metadata_rows(
-    rows: &[Vec<String>],
-    headers: &[String],
-    columns: &MetadataColumns,
-) -> Vec<Result<ActivityMetadata, MetadataRowError>> {
-    rows.iter()
-        .enumerate()
-        .skip(1)
-        .filter_map(|(index, row)| {
-            if row.iter().all(|field| field.trim().is_empty()) {
-                return None;
-            }
-            let row_number = index + 1;
-            Some(
-                parse_activity_row(row, headers.len(), columns).map_err(|message| {
-                    MetadataRowError {
-                        row_number,
-                        message,
-                    }
-                }),
-            )
-        })
-        .collect()
-}
-
 fn parse_activity_row(
-    row: &[String],
+    row: &StringRecord,
     expected_columns: usize,
     columns: &MetadataColumns,
 ) -> Result<ActivityMetadata, String> {
@@ -142,7 +142,7 @@ fn parse_activity_row(
     })
 }
 
-fn cell(row: &[String], index: Option<usize>) -> Option<&str> {
+fn cell(row: &StringRecord, index: Option<usize>) -> Option<&str> {
     index
         .and_then(|i| row.get(i))
         .map(|s| s.trim())
@@ -151,46 +151,6 @@ fn cell(row: &[String], index: Option<usize>) -> Option<&str> {
 
 fn find_last(headers: &[String], names: &[&str]) -> Option<usize> {
     headers.iter().rposition(|h| names.iter().any(|n| h == n))
-}
-
-fn parse_records(text: &str) -> Result<Vec<Vec<String>>, String> {
-    let mut rows = Vec::new();
-    let mut row = Vec::new();
-    let mut field = String::new();
-    let mut chars = text.chars().peekable();
-    let mut quoted = false;
-    while let Some(c) = chars.next() {
-        match c {
-            '"' if quoted && chars.peek() == Some(&'"') => {
-                field.push('"');
-                chars.next();
-            }
-            '"' => quoted = !quoted,
-            ',' if !quoted => {
-                row.push(std::mem::take(&mut field));
-            }
-            '\n' if !quoted => {
-                row.push(std::mem::take(&mut field));
-                rows.push(std::mem::take(&mut row));
-            }
-            '\r' if !quoted => {
-                if chars.peek() == Some(&'\n') {
-                    chars.next();
-                }
-                row.push(std::mem::take(&mut field));
-                rows.push(std::mem::take(&mut row));
-            }
-            _ => field.push(c),
-        }
-    }
-    if quoted {
-        return Err("activity CSV has an unterminated quoted field".into());
-    }
-    if !field.is_empty() || !row.is_empty() {
-        row.push(field);
-        rows.push(row);
-    }
-    Ok(rows)
 }
 
 fn normalize_header(s: &str) -> String {
@@ -333,5 +293,13 @@ mod tests {
         let activity = rows[0].as_ref().unwrap();
         assert_eq!(activity.elapsed_duration_seconds, Some(3723.0));
         assert_eq!(activity.timer_duration_seconds, Some(3490.0));
+    }
+
+    #[test]
+    fn parses_newlines_inside_quoted_fields() {
+        let csv = concat!("Activity ID,Activity Name\n", "42,\"Long\n", "run\"\n",);
+        let rows = parse_csv(csv.as_bytes()).unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].as_ref().unwrap().name.as_deref(), Some("Long\nrun"));
     }
 }
