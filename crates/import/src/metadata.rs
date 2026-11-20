@@ -271,3 +271,42 @@ pub(crate) fn parse_datetime(value: &str) -> Option<DateTime<Utc>> {
     }
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{map_activity_type, parse_csv, parse_datetime, parse_duration, parse_number};
+    use exercise_domain::ActivityType;
+
+    #[test]
+    fn maps_common_english_and_dutch_activity_types() {
+        assert_eq!(map_activity_type("Run"), Some(ActivityType::Run));
+        assert_eq!(map_activity_type("wandeling"), Some(ActivityType::Walk));
+        assert_eq!(map_activity_type("Fietsrit"), Some(ActivityType::Ride));
+        assert_eq!(map_activity_type("Zwemmen"), Some(ActivityType::Swim));
+        assert_eq!(map_activity_type("Yoga"), None);
+    }
+
+    #[test]
+    fn parses_localized_numbers_durations_and_dates() {
+        assert_eq!(parse_number("1.234,5"), Some(1234.5));
+        assert_eq!(parse_duration("1:02:03"), Some(3723.0));
+        assert_eq!(
+            parse_datetime("2024-08-20T09:41:13Z").unwrap().to_rfc3339(),
+            "2024-08-20T09:41:13+00:00"
+        );
+    }
+
+    #[test]
+    fn parses_quoted_csv_fields_and_keeps_bad_rows_local() {
+        let csv = concat!(
+            "Activiteits-ID,Activiteitstype,Naam activiteit,Bestandsnaam\n",
+            "42,Run,\"Morning, easy run\",activities/run.gpx\n",
+            "43,Walk,too,few,columns\n",
+        );
+        let rows = parse_csv(csv.as_bytes()).unwrap();
+        let activity = rows[0].as_ref().unwrap();
+        assert_eq!(activity.source_id, "42");
+        assert_eq!(activity.name.as_deref(), Some("Morning, easy run"));
+        assert_eq!(rows[1].as_ref().unwrap_err().row_number, 3);
+    }
+}

@@ -524,3 +524,80 @@ fn validate_path(path: &str) -> Result<(), String> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{ImportEntryOutcome, parse_strava_zip};
+    use exercise_domain::ActivityType;
+    use std::io::{Cursor, Write};
+    use zip::{ZipWriter, write::SimpleFileOptions};
+
+    fn archive(entries: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
+        for (path, contents) in entries {
+            writer
+                .start_file(*path, SimpleFileOptions::default())
+                .unwrap();
+            writer.write_all(contents).unwrap();
+        }
+        writer.finish().unwrap().into_inner()
+    }
+
+    fn activity_csv(rows: &str) -> Vec<u8> {
+        format!(
+            "Activiteits-ID,Activiteitstype,Datum van activiteit,Naam activiteit,Verstreken tijd,Afstand,Bestandsnaam\n{rows}"
+        )
+        .into_bytes()
+    }
+
+    #[test]
+    fn imports_gpx_and_prefers_its_type_and_timestamp() {
+        let gpx = br#"<gpx><trk><type>Walk</type><trkseg>
+            <trkpt lat="51.5" lon="-0.1"><time>2024-08-20T10:00:00+01:00</time></trkpt>
+            <trkpt lat="51.6" lon="-0.2"><time>2024-08-20T10:01:00+01:00</time></trkpt>
+        </trkseg></trk></gpx>"#;
+        let csv =
+            activity_csv("42,Run,2024-08-19 09:00:00,Test activity,60,1500,activities/test.gpx\n");
+        let zip = archive(&[("activities.csv", &csv), ("activities/test.gpx", gpx)]);
+
+        let report = parse_strava_zip(&zip).unwrap();
+        assert_eq!(report.entries.len(), 1);
+        let ImportEntryOutcome::Imported { activity, track } = &report.entries[0] else {
+            panic!("expected a parsed GPX activity")
+        };
+        assert_eq!(activity.activity_type, ActivityType::Walk);
+        assert_eq!(
+            activity.started_at.unwrap().to_rfc3339(),
+            "2024-08-20T09:00:00+00:00"
+        );
+        assert_eq!(track.points.len(), 2);
+        assert_eq!(activity.distance_meters, Some(1500.0));
+    }
+
+    #[test]
+    fn reports_a_malformed_row_without_losing_valid_activities() {
+        let gpx = br#"<gpx><trk><trkseg><trkpt lat="51.5" lon="-0.1" /></trkseg></trk></gpx>"#;
+        let csv = activity_csv(concat!(
+            "42,Run,2024-08-19 09:00:00,Valid,60,1500,activities/test.gpx\n",
+            "43,Walk,too,few,columns\n",
+        ));
+        let zip = archive(&[("activities.csv", &csv), ("activities/test.gpx", gpx)]);
+
+        let report = parse_strava_zip(&zip).unwrap();
+        assert_eq!(report.entries.len(), 2);
+        assert!(matches!(
+            report.entries[0],
+            ImportEntryOutcome::Imported { .. }
+        ));
+        assert!(matches!(
+            &report.entries[1],
+            ImportEntryOutcome::Malformed { path, .. } if path == "activities.csv#row-3"
+        ));
+    }
+
+    #[test]
+    fn rejects_non_zip_input_with_a_clear_archive_error() {
+        let error = parse_strava_zip(b"not a zip archive").unwrap_err();
+        assert_eq!(error.to_string(), "invalid or unsupported ZIP archive");
+    }
+}
