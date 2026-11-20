@@ -571,7 +571,7 @@ mod tests {
 
     #[test]
     fn imports_gpx_and_prefers_its_type_and_timestamp() {
-        let gpx = br#"<gpx><trk><type>Walk</type><trkseg>
+        let gpx = br#"<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1"><trk><type>Walk</type><trkseg>
             <trkpt lat="51.5" lon="-0.1"><time>2024-08-20T10:00:00+01:00</time></trkpt>
             <trkpt lat="51.6" lon="-0.2"><time>2024-08-20T10:01:00+01:00</time></trkpt>
         </trkseg></trk></gpx>"#;
@@ -600,7 +600,7 @@ mod tests {
 
     #[test]
     fn reports_a_malformed_row_without_losing_valid_activities() {
-        let gpx = br#"<gpx><trk><trkseg><trkpt lat="51.5" lon="-0.1" /></trkseg></trk></gpx>"#;
+        let gpx = br#"<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1"><trk><trkseg><trkpt lat="51.5" lon="-0.1" /></trkseg></trk></gpx>"#;
         let csv = activity_csv(concat!(
             "42,Run,2024-08-19 09:00:00,Valid,60,1500,activities/test.gpx\n",
             "43,Walk,too,few,columns\n",
