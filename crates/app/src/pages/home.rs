@@ -14,7 +14,8 @@ struct ActivityTableRow {
     timestamp: String,
     activity_type: String,
     distance: String,
-    duration: String,
+    elapsed_duration: String,
+    timer_duration: String,
     status: String,
 }
 
@@ -119,7 +120,8 @@ pub fn Home() -> impl IntoView {
                                     <th scope="col">"Timestamp"</th>
                                     <th scope="col">"Activity type"</th>
                                     <th scope="col">"Distance"</th>
-                                    <th scope="col">"Time spent"</th>
+                                    <th scope="col">"Elapsed time"</th>
+                                    <th scope="col">"Timer time"</th>
                                     <th scope="col">"Import result"</th>
                                 </tr>
                             </thead>
@@ -130,7 +132,8 @@ pub fn Home() -> impl IntoView {
                                         <td>{row.timestamp}</td>
                                         <td>{row.activity_type}</td>
                                         <td>{row.distance}</td>
-                                        <td>{row.duration}</td>
+                                        <td>{row.elapsed_duration}</td>
+                                        <td>{row.timer_duration}</td>
                                         <td class="activity-result">{row.status}</td>
                                     </tr>
                                 }).collect_view()}
@@ -187,8 +190,12 @@ fn activity_row(activity: Activity, status: String) -> ActivityTableRow {
             .distance_meters
             .map(format_distance)
             .unwrap_or_else(|| "—".into()),
-        duration: activity
-            .duration_seconds
+        elapsed_duration: activity
+            .elapsed_duration_seconds
+            .map(format_duration)
+            .unwrap_or_else(|| "—".into()),
+        timer_duration: activity
+            .timer_duration_seconds
             .map(format_duration)
             .unwrap_or_else(|| "—".into()),
         status,
@@ -201,7 +208,8 @@ fn empty_row(name: String, status: String) -> ActivityTableRow {
         timestamp: "—".into(),
         activity_type: "—".into(),
         distance: "—".into(),
-        duration: "—".into(),
+        elapsed_duration: "—".into(),
+        timer_duration: "—".into(),
         status,
     }
 }

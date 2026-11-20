@@ -13,6 +13,7 @@ fn imports_the_sanitized_test_subset() {
     let mut walks = 0;
     let mut rides = 0;
     let mut swims = 0;
+    let mut timer_durations = 0;
 
     for entry in &report.entries {
         let ImportEntryOutcome::Imported { activity, track } = entry else {
@@ -31,9 +32,21 @@ fn imports_the_sanitized_test_subset() {
             "activity distance should be present"
         );
         assert!(
-            activity.duration_seconds.is_some(),
-            "activity duration should be present"
+            activity.elapsed_duration_seconds.is_some(),
+            "elapsed duration should be present"
         );
+        if activity.timer_duration_seconds.is_some() {
+            timer_durations += 1;
+        }
+        if let (Some(elapsed), Some(timer)) = (
+            activity.elapsed_duration_seconds,
+            activity.timer_duration_seconds,
+        ) {
+            assert!(
+                timer <= elapsed,
+                "timer time should not exceed elapsed time"
+            );
+        }
 
         match activity.activity_type {
             ActivityType::Run => runs += 1,
@@ -45,4 +58,8 @@ fn imports_the_sanitized_test_subset() {
     }
 
     assert_eq!((runs, walks, rides, swims), (2, 2, 1, 1));
+    assert_eq!(
+        timer_durations, 5,
+        "the five FIT activities should provide timer time"
+    );
 }

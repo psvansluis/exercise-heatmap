@@ -43,7 +43,10 @@ pub struct Activity {
     pub name: Option<String>,
     pub activity_type: ActivityType,
     pub started_at: Option<DateTime<Utc>>,
-    pub duration_seconds: Option<f64>,
+    /// Wall-clock time including pauses, when available.
+    pub elapsed_duration_seconds: Option<f64>,
+    /// Timer-active time excluding pauses, when available.
+    pub timer_duration_seconds: Option<f64>,
     pub distance_meters: Option<f64>,
     pub bounds: Option<BoundingBox>,
 }

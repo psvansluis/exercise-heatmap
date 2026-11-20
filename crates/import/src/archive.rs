@@ -331,6 +331,8 @@ impl ImportContext<'_, '_> {
                     points: track.points,
                     activity_type: track.activity_type,
                     started_at: track.started_at,
+                    elapsed_duration_seconds: track.elapsed_duration_seconds,
+                    timer_duration_seconds: None,
                 },
                 0,
             ));
@@ -355,6 +357,8 @@ impl ImportContext<'_, '_> {
                 points: track.points,
                 activity_type: track.activity_type,
                 started_at: track.started_at,
+                elapsed_duration_seconds: track.elapsed_duration_seconds,
+                timer_duration_seconds: track.timer_duration_seconds,
             },
             expanded_size,
         ))
@@ -378,6 +382,12 @@ impl ImportContext<'_, '_> {
             });
             let mut activity = to_activity(&meta, Some(activity_type), None);
             activity.started_at = parsed.started_at.or(activity.started_at);
+            activity.elapsed_duration_seconds = parsed
+                .elapsed_duration_seconds
+                .or(activity.elapsed_duration_seconds);
+            activity.timer_duration_seconds = parsed
+                .timer_duration_seconds
+                .or(activity.timer_duration_seconds);
             report.entries.push(ImportEntryOutcome::MetadataOnly {
                 activity,
                 reason: "track file contains no usable GPS points".into(),
@@ -387,6 +397,12 @@ impl ImportContext<'_, '_> {
         let bounds = bounds_for(&parsed.points);
         let mut activity = to_activity(&meta, Some(activity_type), bounds);
         activity.started_at = parsed.started_at.or(activity.started_at);
+        activity.elapsed_duration_seconds = parsed
+            .elapsed_duration_seconds
+            .or(activity.elapsed_duration_seconds);
+        activity.timer_duration_seconds = parsed
+            .timer_duration_seconds
+            .or(activity.timer_duration_seconds);
         let track = Track {
             activity_id: activity.id.clone(),
             points: parsed.points,
@@ -433,6 +449,8 @@ struct ParsedFile {
     points: Vec<exercise_domain::TrackPoint>,
     activity_type: Option<ActivityType>,
     started_at: Option<chrono::DateTime<chrono::Utc>>,
+    elapsed_duration_seconds: Option<f64>,
+    timer_duration_seconds: Option<f64>,
 }
 
 fn ext_from_path(path: &str) -> &str {
@@ -451,7 +469,8 @@ fn to_activity(
         name: meta.name.clone(),
         activity_type: file_type.unwrap_or_else(|| meta.activity_type.clone()),
         started_at: meta.started_at,
-        duration_seconds: meta.duration_seconds,
+        elapsed_duration_seconds: meta.elapsed_duration_seconds,
+        timer_duration_seconds: meta.timer_duration_seconds,
         distance_meters: meta.distance_meters,
         bounds,
     }
@@ -556,8 +575,11 @@ mod tests {
             <trkpt lat="51.5" lon="-0.1"><time>2024-08-20T10:00:00+01:00</time></trkpt>
             <trkpt lat="51.6" lon="-0.2"><time>2024-08-20T10:01:00+01:00</time></trkpt>
         </trkseg></trk></gpx>"#;
-        let csv =
-            activity_csv("42,Run,2024-08-19 09:00:00,Test activity,60,1500,activities/test.gpx\n");
+        let csv = concat!(
+            "Activiteits-ID,Activiteitstype,Datum van activiteit,Naam activiteit,Verstreken tijd,Bewegingstijd,Afstand,Bestandsnaam\n",
+            "42,Run,2024-08-19 09:00:00,Test activity,999,50,1500,activities/test.gpx\n",
+        );
+        let csv = csv.as_bytes();
         let zip = archive(&[("activities.csv", &csv), ("activities/test.gpx", gpx)]);
 
         let report = parse_strava_zip(&zip).unwrap();
@@ -570,6 +592,8 @@ mod tests {
             activity.started_at.unwrap().to_rfc3339(),
             "2024-08-20T09:00:00+00:00"
         );
+        assert_eq!(activity.elapsed_duration_seconds, Some(60.0));
+        assert_eq!(activity.timer_duration_seconds, Some(50.0));
         assert_eq!(track.points.len(), 2);
         assert_eq!(activity.distance_meters, Some(1500.0));
     }

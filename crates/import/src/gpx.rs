@@ -6,6 +6,7 @@ pub(crate) struct ParsedTrack {
     pub points: Vec<TrackPoint>,
     pub activity_type: Option<ActivityType>,
     pub started_at: Option<DateTime<Utc>>,
+    pub elapsed_duration_seconds: Option<f64>,
 }
 
 #[derive(Default)]
@@ -41,8 +42,19 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<ParsedTrack, String> {
         }
         state.consume_token(token, &preceding_text)?;
     }
+    let timestamps: Vec<_> = state
+        .points
+        .iter()
+        .filter_map(|point| point.timestamp)
+        .collect();
+    let elapsed_duration_seconds = timestamps
+        .first()
+        .zip(timestamps.last())
+        .map(|(first, last)| (*last - *first).num_milliseconds() as f64 / 1000.0)
+        .filter(|duration| *duration >= 0.0);
     Ok(ParsedTrack {
-        started_at: state.points.iter().find_map(|point| point.timestamp),
+        started_at: timestamps.first().copied(),
+        elapsed_duration_seconds,
         points: state.points,
         activity_type: state.sport,
     })
@@ -149,4 +161,20 @@ fn parse_gpx_time(value: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(&value)
         .ok()
         .map(|t| t.with_timezone(&Utc))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse;
+
+    #[test]
+    fn derives_elapsed_duration_from_first_and_last_point_times() {
+        let gpx = br#"<gpx><trk><trkseg>
+            <trkpt lat="51.5" lon="-0.1"><time>2024-08-20T10:00:00Z</time></trkpt>
+            <trkpt lat="51.6" lon="-0.2"><time>2024-08-20T10:01:15Z</time></trkpt>
+        </trkseg></trk></gpx>"#;
+
+        let parsed = parse(gpx).unwrap();
+        assert_eq!(parsed.elapsed_duration_seconds, Some(75.0));
+    }
 }

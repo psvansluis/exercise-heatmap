@@ -5,6 +5,8 @@ pub(crate) struct ParsedTrack {
     pub points: Vec<TrackPoint>,
     pub activity_type: Option<ActivityType>,
     pub started_at: Option<DateTime<Utc>>,
+    pub elapsed_duration_seconds: Option<f64>,
+    pub timer_duration_seconds: Option<f64>,
 }
 
 #[derive(Default)]
@@ -14,6 +16,8 @@ struct DataValues {
     timestamp: Option<u32>,
     activity_started_at: Option<u32>,
     sport: Option<u8>,
+    elapsed_duration_seconds: Option<f64>,
+    timer_duration_seconds: Option<f64>,
 }
 
 struct FitParser {
@@ -21,6 +25,9 @@ struct FitParser {
     points: Vec<TrackPoint>,
     activity_type: Option<ActivityType>,
     activity_started_at: Option<DateTime<Utc>>,
+    elapsed_duration_seconds: Option<f64>,
+    timer_duration_seconds: Option<f64>,
+    activity_timer_duration_seconds: Option<f64>,
     last_timestamp: Option<u32>,
 }
 
@@ -39,6 +46,9 @@ pub(crate) fn parse(data: &[u8]) -> Result<ParsedTrack, String> {
         points: Vec::new(),
         activity_type: None,
         activity_started_at: None,
+        elapsed_duration_seconds: None,
+        timer_duration_seconds: None,
+        activity_timer_duration_seconds: None,
         last_timestamp: None,
     };
     let mut pos = header_size;
@@ -60,6 +70,10 @@ pub(crate) fn parse(data: &[u8]) -> Result<ParsedTrack, String> {
         points: parser.points,
         activity_type: parser.activity_type,
         started_at,
+        elapsed_duration_seconds: parser.elapsed_duration_seconds,
+        timer_duration_seconds: parser
+            .activity_timer_duration_seconds
+            .or(parser.timer_duration_seconds),
     })
 }
 
@@ -187,6 +201,19 @@ impl FitParser {
                 .filter(|timestamp| *timestamp != u32::MAX)
                 .and_then(fit_time);
         }
+        if global == 18 {
+            self.elapsed_duration_seconds = self
+                .elapsed_duration_seconds
+                .or(values.elapsed_duration_seconds);
+            self.timer_duration_seconds = self
+                .timer_duration_seconds
+                .or(values.timer_duration_seconds);
+        }
+        if global == 34 {
+            self.activity_timer_duration_seconds = self
+                .activity_timer_duration_seconds
+                .or(values.timer_duration_seconds);
+        }
         if global != 20 {
             return;
         }
@@ -256,6 +283,15 @@ fn read_field(
         (_, 253) if size == 4 => values.timestamp = Some(read_u32(field, big_endian)),
         (18, 2) if size == 4 => values.activity_started_at = Some(read_u32(field, big_endian)),
         (18, 5) if size == 1 => values.sport = Some(field[0]),
+        (18, 7) if size == 4 && base & 0x1f == 6 => {
+            values.elapsed_duration_seconds = fit_duration(field, big_endian)
+        }
+        (18, 8) if size == 4 && base & 0x1f == 6 => {
+            values.timer_duration_seconds = fit_duration(field, big_endian)
+        }
+        (34, 0) if size == 4 && base & 0x1f == 6 => {
+            values.timer_duration_seconds = fit_duration(field, big_endian)
+        }
         _ => {}
     }
 }
@@ -296,6 +332,11 @@ fn fit_time(seconds: u32) -> Option<DateTime<Utc>> {
     Utc.timestamp_opt(seconds as i64 + 631_065_600, 0).single()
 }
 
+fn fit_duration(bytes: &[u8], big_endian: bool) -> Option<f64> {
+    let milliseconds = read_u32(bytes, big_endian);
+    (milliseconds != u32::MAX).then_some(milliseconds as f64 / 1000.0)
+}
+
 fn map_fit_sport(sport: u8) -> Option<ActivityType> {
     match sport {
         1 => Some(ActivityType::Run),
@@ -322,4 +363,49 @@ fn crc(data: &[u8]) -> u16 {
         crc ^= tmp ^ TABLE[(b >> 4) as usize];
     }
     crc
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{DataValues, read_field};
+
+    #[test]
+    fn decodes_fit_session_durations_from_milliseconds() {
+        let mut values = DataValues::default();
+        read_field(
+            &mut values,
+            18,
+            7,
+            4,
+            0x86,
+            &120_500u32.to_le_bytes(),
+            false,
+        );
+        read_field(
+            &mut values,
+            18,
+            8,
+            4,
+            0x86,
+            &118_000u32.to_le_bytes(),
+            false,
+        );
+
+        assert_eq!(values.elapsed_duration_seconds, Some(120.5));
+        assert_eq!(values.timer_duration_seconds, Some(118.0));
+    }
+
+    #[test]
+    fn ignores_invalid_fit_session_duration_sentinel() {
+        let mut values = DataValues::default();
+        read_field(&mut values, 18, 7, 4, 0x86, &u32::MAX.to_le_bytes(), false);
+        assert_eq!(values.elapsed_duration_seconds, None);
+    }
+
+    #[test]
+    fn reads_activity_level_timer_duration() {
+        let mut values = DataValues::default();
+        read_field(&mut values, 34, 0, 4, 0x86, &95_250u32.to_le_bytes(), false);
+        assert_eq!(values.timer_duration_seconds, Some(95.25));
+    }
 }

@@ -93,7 +93,8 @@ struct Activity {
     name: Option<String>,
     activity_type: ActivityType,
     started_at: Option<DateTime<Utc>>,
-    duration_seconds: Option<f64>,
+    elapsed_duration_seconds: Option<f64>, // wall-clock interval, including pauses
+    timer_duration_seconds: Option<f64>,   // active timer interval, excluding pauses
     distance_meters: Option<f64>,
     bounds: Option<BoundingBox>,
 }
@@ -118,7 +119,7 @@ Data rules:
 - Validate finite coordinate values and legal latitude/longitude ranges; retain source data only if the product later chooses to offer raw-file preservation.
 - Normalize timestamps to UTC while retaining enough information to present local time correctly.
 - Keep track points in source order. Never infer a timestamp for a point from activity start time without marking it as derived.
-- Store distance in metres and duration in seconds; format units at the UI boundary.
+- Store distance in metres and both elapsed and timer duration in seconds; elapsed time includes pauses, while timer time excludes pauses. Prefer valid FIT summary values and GPX point-time elapsed estimates when available, with CSV values as fallback. Format values at the UI boundary.
 - Use an app-owned ID plus a deduplication key derived from provider ID where available. Fallback matching should combine stable metadata and track characteristics and must avoid silently merging similar activities.
 - A track with no valid coordinates may still have useful activity metadata; record an import warning and retain or skip it according to an explicit policy.
 

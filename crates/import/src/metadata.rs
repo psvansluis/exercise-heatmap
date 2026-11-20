@@ -9,7 +9,8 @@ pub(crate) struct ActivityMetadata {
     pub activity_type: ActivityType,
     pub raw_type: String,
     pub started_at: Option<DateTime<Utc>>,
-    pub duration_seconds: Option<f64>,
+    pub elapsed_duration_seconds: Option<f64>,
+    pub timer_duration_seconds: Option<f64>,
     pub distance_meters: Option<f64>,
     pub filename: Option<String>,
 }
@@ -25,7 +26,8 @@ struct MetadataColumns {
     activity_type: Option<usize>,
     date: Option<usize>,
     name: Option<usize>,
-    duration: Option<usize>,
+    elapsed_duration: Option<usize>,
+    timer_duration: Option<usize>,
     distance: Option<usize>,
     filename: Option<usize>,
 }
@@ -58,13 +60,23 @@ fn metadata_columns(headers: &[String]) -> Result<MetadataColumns, String> {
             "start_date",
         ]),
         name: find(&["naam activiteit", "activity name", "name"]),
-        duration: find_last(
+        elapsed_duration: find_last(
             headers,
             &[
                 "verstreken tijd",
                 "elapsed time",
                 "elapsed_time",
                 "duration",
+            ],
+        ),
+        timer_duration: find_last(
+            headers,
+            &[
+                "timer time",
+                "timer_time",
+                "moving time",
+                "moving_time",
+                "bewegingstijd",
             ],
         ),
         distance: find_last(headers, &["afstand", "distance"]),
@@ -123,7 +135,8 @@ fn parse_activity_row(
         activity_type,
         raw_type,
         started_at: cell(row, columns.date).and_then(parse_datetime),
-        duration_seconds: cell(row, columns.duration).and_then(parse_duration),
+        elapsed_duration_seconds: cell(row, columns.elapsed_duration).and_then(parse_duration),
+        timer_duration_seconds: cell(row, columns.timer_duration).and_then(parse_duration),
         distance_meters: cell(row, columns.distance).and_then(parse_number),
         filename: cell(row, columns.filename).map(str::to_string),
     })
@@ -308,5 +321,17 @@ mod tests {
         assert_eq!(activity.source_id, "42");
         assert_eq!(activity.name.as_deref(), Some("Morning, easy run"));
         assert_eq!(rows[1].as_ref().unwrap_err().row_number, 3);
+    }
+
+    #[test]
+    fn maps_csv_elapsed_and_timer_columns_separately() {
+        let csv = concat!(
+            "Activity ID,Elapsed Time,Moving Time\n",
+            "42,1:02:03,58:10\n",
+        );
+        let rows = parse_csv(csv.as_bytes()).unwrap();
+        let activity = rows[0].as_ref().unwrap();
+        assert_eq!(activity.elapsed_duration_seconds, Some(3723.0));
+        assert_eq!(activity.timer_duration_seconds, Some(3490.0));
     }
 }
