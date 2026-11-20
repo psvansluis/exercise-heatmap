@@ -6,6 +6,8 @@ edition = "2024"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+exercise-domain = { path = "../domain" }
+exercise-import = { path = "../import" }
 leptos = { version = "0.8", features = ["csr"] }
 leptos_meta = { version = "0.8" }
 leptos_router = { version = "0.8" }
@@ -18,10 +20,10 @@ js-sys = "0.3"
 send_wrapper = "0.6"
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.6"
+web-sys = { version = "0.3", features = ["Blob", "Event", "File", "FileList", "HtmlInputElement"] }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
-web-sys = { version = "0.3", features = ["Document", "Window"] }
 
 
 

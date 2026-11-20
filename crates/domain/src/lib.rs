@@ -21,6 +21,7 @@ pub enum ActivityType {
     Walk,
     Hike,
     Ride,
+    Swim,
     Other(String),
 }
 

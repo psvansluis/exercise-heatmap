@@ -1,3 +1,4 @@
 assets/export_*.zip
+/assets/test-subset.zip
 /target/
 /crates/app/dist/

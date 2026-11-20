@@ -197,6 +197,103 @@ body {
   text-align: center;
 }
 
+.import-panel {
+  margin: 0 0 28px;
+  padding: clamp(20px, 3vw, 30px);
+  border: 1px solid #d9e1d9;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 18px 50px rgba(35, 58, 45, 0.07);
+}
+
+.import-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 22px;
+}
+
+.import-heading h2 {
+  margin: 10px 0 7px;
+  color: #14231c;
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  letter-spacing: -0.04em;
+}
+
+.import-copy {
+  margin: 0;
+  color: #596a61;
+  line-height: 1.55;
+}
+
+.file-picker {
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 18px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #276442;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.file-picker:hover { background: #1f5336; }
+.file-picker:has(input:disabled) { opacity: 0.65; cursor: wait; }
+.file-picker input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+
+.import-status {
+  min-height: 24px;
+  margin: 18px 0 14px;
+  color: #6b7b72;
+  font-size: 0.86rem;
+}
+
+.activity-table-scroll {
+  max-height: min(64vh, 720px);
+  overflow: auto;
+  border: 1px solid #e1e8e1;
+  border-radius: 12px;
+}
+
+.activity-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: separate;
+  border-spacing: 0;
+  color: #26382d;
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.activity-table th,
+.activity-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #edf0ed;
+  vertical-align: top;
+}
+
+.activity-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f4f7f3;
+  color: #52665a;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.activity-table tbody tr:last-child td { border-bottom: 0; }
+.activity-table tbody tr:hover { background: #f8faf7; }
+.activity-result { min-width: 210px; color: #63756a; }
+.activity-count { margin: 11px 2px 0; color: #829087; font-size: 0.75rem; text-align: right; }
+
 @media (max-width: 600px) {
   .page-shell {
     width: min(100% - 28px, 1120px);
@@ -211,6 +308,9 @@ body {
     min-height: 52px;
     padding: 0 15px;
   }
+
+  .import-heading { align-items: stretch; flex-direction: column; }
+  .file-picker { width: 100%; }
 
   .map-stage,
   .maplibre-canvas {

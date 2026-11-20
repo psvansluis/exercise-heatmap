@@ -1,11 +1,11 @@
-//! Import adapters that normalize external activity archives into domain types.
-//!
-//! Archive and format dependencies will be selected after the ZIP, FIT, and
-//! `.fit.gz` compatibility spike described in `DESIGN.md`.
+//! Import adapters that normalize Strava archives into canonical domain types.
 
 mod archive;
 mod fit;
 mod gpx;
 mod metadata;
 
-pub use archive::{ImportEntryOutcome, ImportWarning};
+pub use archive::{
+    ImportEntryOutcome, ImportError, ImportReport, ImportWarning, ParseOptions, parse_strava_zip,
+    parse_strava_zip_with_options,
+};
