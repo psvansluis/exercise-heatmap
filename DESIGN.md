@@ -123,19 +123,19 @@ Data rules:
 - Use an app-owned ID plus a deduplication key derived from provider ID where available. Fallback matching should combine stable metadata and track characteristics and must avoid silently merging similar activities.
 - A track with no valid coordinates may still have useful activity metadata; record an import warning and retain or skip it according to an explicit policy.
 
-## 5. Strava ZIP import
+## 5. Activity file import
 
 ### Recommended import pipeline
 
-1. User selects a local ZIP; show that it is processed in the browser.
-2. Inspect archive entry names and sizes before extraction. Ignore unrelated content; reject path traversal, unreasonable expansion ratios, oversized entries, and malformed archives.
-3. Locate Strava activity metadata (typically activity CSV/metadata files) and activity files by archive path/extension. The repository sample includes `.gpx`, `.fit`, and `.fit.gz`, so support for compressed FIT is a concrete compatibility requirement to investigate.
-4. Parse each supported activity file into the canonical model. Reconcile metadata and track file by provider ID when possible. Do not assume every metadata row has a matching GPS file or that filenames alone are durable IDs.
-5. Validate, normalize, compute bounds, and produce per-file warnings. Make import outcomes reviewable before committing: imported, skipped, duplicate, unsupported, malformed.
-6. Write a batch in IndexedDB transaction(s) with progress and cancellation. Avoid leaving a half-imported archive if the browser closes; record an import batch or commit atomically where practical.
-7. Refresh activity metadata/indexes and query tracks for the current viewport.
+1. Accept individual `.gpx`, `.fit`, and `.fit.gz` files, as well as ZIP archives. Allow multiple files in one upload; process each ZIP as its own batch.
+2. Inspect archive entry names and sizes before extraction. Find supported activity files at any path depth; ignore unrelated content and reject unsafe paths, unreasonable expansion ratios, oversized entries, and malformed archives.
+3. Treat `activities.csv` as optional metadata for its containing ZIP only. Match rows to supported files by exact archive path; do not use basename, provider ID, timestamp, or other fuzzy matching.
+4. Parse every supported activity file, including files not mentioned in the CSV. Use parsed activity data as primary values and exact-path CSV metadata to fill missing fields such as activity name. A CSV row with no corresponding supported file remains a metadata-only result with a warning.
+5. Parse loose uploads without looking for or reconciling an `activities.csv`. Use the filename as display fallback and the content/path as the imported-file identity.
+6. Emit each completed entry and progress as an import event so the UI can add results while a batch continues. Preserve per-file errors so one malformed activity does not discard other results.
+7. Validate, normalize, compute bounds, and expose imported, metadata-only, duplicate, skipped, and malformed outcomes. When persistence is implemented, write a batch in IndexedDB transaction(s) and consider cancellation and interrupted imports.
 
-Support GPX and FIT as initial parsers because both appear in the sample. Treat `.fit.gz` decompression and FIT parsing in WASM as an explicit spike. TCX is a reasonable later format adapter, not a confirmed sample requirement. Parse Strava CSV/metadata independently from track parsing so missing or evolving archive fields do not break all import paths.
+Support GPX and FIT, including `.fit.gz`, because they appear in the sample. TCX is a reasonable later format adapter, not a confirmed sample requirement. Keep CSV metadata parsing independent from activity-file parsing so missing or evolving archive fields do not prevent importing supported files.
 
 The sample archive is user data and should remain a local fixture; do not add it to public builds, logs, screenshots, or test fixtures committed to a public repository. Create small synthetic and anonymized fixtures for tests.
 

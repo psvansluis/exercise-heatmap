@@ -11,6 +11,7 @@ pub struct ActivityId(pub String);
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ActivitySource {
     StravaArchive,
+    ImportedFile,
     Backup,
 }
 

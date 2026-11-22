@@ -16,7 +16,7 @@ fn imports_the_sanitized_test_subset() {
     let mut timer_durations = 0;
 
     for entry in &report.entries {
-        let ImportEntryOutcome::Imported { activity, track } = entry else {
+        let ImportEntryOutcome::Reconciled { activity, track } = entry else {
             panic!("expected every sample activity to have a usable track: {entry:?}");
         };
         assert!(

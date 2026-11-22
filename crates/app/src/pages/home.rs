@@ -1,7 +1,7 @@
 use crate::components::maplibre_map::MapLibreMap;
 use exercise_domain::{Activity, ActivityType};
 use exercise_import::{
-    ImportEntryOutcome, ImportReport, ParseOptions, parse_strava_zip_with_options,
+    ImportEntryOutcome, ImportEvent, ParseOptions, ZipImportStream, parse_activity_file,
 };
 use leptos::prelude::*;
 use wasm_bindgen::JsCast;
@@ -19,7 +19,7 @@ struct ActivityTableRow {
     status: String,
 }
 
-const MAX_ARCHIVE_BYTES: u64 = 256 * 1024 * 1024;
+const MAX_UPLOAD_BYTES: u64 = 256 * 1024 * 1024;
 
 #[component]
 pub fn Home() -> impl IntoView {
@@ -27,42 +27,105 @@ pub fn Home() -> impl IntoView {
     let is_importing = RwSignal::new(false);
     let error = RwSignal::new(None::<String>);
     let selected_filename = RwSignal::new(None::<String>);
+    let progress = RwSignal::new(None::<String>);
 
     let on_file_change = move |event: Event| {
         let input = event
             .target()
             .and_then(|target| target.dyn_into::<HtmlInputElement>().ok());
         let Some(input) = input else { return };
-        let Some(file) = input.files().and_then(|files| files.get(0)) else {
-            return;
-        };
+        let Some(files) = input.files() else { return };
+        let selected_files = (0..files.length())
+            .filter_map(|index| files.get(index))
+            .collect::<Vec<_>>();
         input.set_value("");
-
-        selected_filename.set(Some(file.name()));
-        error.set(None);
-        rows.set(Vec::new());
-        if file.size() > MAX_ARCHIVE_BYTES as f64 {
-            error.set(Some(
-                "The selected ZIP exceeds the 256 MB import limit.".into(),
-            ));
+        if selected_files.is_empty() {
             return;
         }
 
+        let total_files = selected_files.len();
+        selected_filename.set(Some(if total_files == 1 {
+            selected_files[0].name()
+        } else {
+            format!("{total_files} files")
+        }));
+        error.set(None);
+        progress.set(Some("Preparing selected files…".into()));
+        rows.set(Vec::new());
         is_importing.set(true);
+
         leptos::task::spawn_local(async move {
-            let file_bytes = JsFuture::from(file.array_buffer()).await;
-            match file_bytes {
-                Ok(buffer) => {
-                    let bytes = js_sys::Uint8Array::new(&buffer).to_vec();
-                    let options = ParseOptions::default();
-                    match parse_strava_zip_with_options(&bytes, &options) {
-                        Ok(report) => rows.set(rows_from_report(report)),
-                        Err(parse_error) => error.set(Some(parse_error.to_string())),
-                    }
+            let options = ParseOptions::default();
+            for (file_index, file) in selected_files.into_iter().enumerate() {
+                let file_name = file.name();
+                if file.size() > MAX_UPLOAD_BYTES as f64 {
+                    rows.update(|rows| {
+                        rows.push(empty_row(
+                            file_name,
+                            "Malformed · file exceeds the 256 MB import limit".into(),
+                        ))
+                    });
+                    continue;
                 }
-                Err(_) => error.set(Some("The selected ZIP could not be read.".into())),
+
+                progress.set(Some(format!("Reading {file_name}…")));
+                match JsFuture::from(file.array_buffer()).await {
+                    Ok(buffer) => {
+                        let bytes = js_sys::Uint8Array::new(&buffer).to_vec();
+                        if file_name.to_lowercase().ends_with(".zip") {
+                            match ZipImportStream::new(&bytes, options.clone()) {
+                                Ok(mut stream) => loop {
+                                    match stream.next_event() {
+                                        Ok(Some(ImportEvent::Entry(outcome))) => {
+                                            rows.update(|rows| {
+                                                rows.push(row_from_outcome(outcome))
+                                            });
+                                            yield_to_browser().await;
+                                        }
+                                        Ok(Some(ImportEvent::Progress { completed, total })) => {
+                                            progress.set(Some(format!(
+                                                "Processed {completed} of {total} activity files in {file_name}"
+                                            )));
+                                            yield_to_browser().await;
+                                        }
+                                        Ok(Some(ImportEvent::Warning(warning))) => {
+                                            progress.set(Some(format!(
+                                                "{} · {}",
+                                                warning.path.unwrap_or_else(|| file_name.clone()),
+                                                warning.message
+                                            )));
+                                            yield_to_browser().await;
+                                        }
+                                        Ok(Some(ImportEvent::Complete)) | Ok(None) => break,
+                                        Err(parse_error) => {
+                                            error.set(Some(parse_error.to_string()));
+                                            break;
+                                        }
+                                    }
+                                },
+                                Err(parse_error) => error.set(Some(parse_error.to_string())),
+                            }
+                        } else {
+                            let outcome = parse_activity_file(&file_name, &bytes, &options);
+                            rows.update(|rows| rows.push(row_from_outcome(outcome)));
+                            yield_to_browser().await;
+                        }
+                    }
+                    Err(_) => rows.update(|rows| {
+                        rows.push(empty_row(
+                            file_name,
+                            "Malformed · file could not be read".into(),
+                        ))
+                    }),
+                }
+                progress.set(Some(format!(
+                    "Finished file {} of {total_files}",
+                    file_index + 1
+                )));
+                yield_to_browser().await;
             }
             is_importing.set(false);
+            progress.set(None);
         });
     };
 
@@ -80,17 +143,18 @@ pub fn Home() -> impl IntoView {
                 <div class="import-heading">
                     <div>
                         <p class="eyebrow">"YOUR LOCAL DATA"</p>
-                        <h2 id="import-title">"Import an activity archive"</h2>
+                        <h2 id="import-title">"Import activity files"</h2>
                         <p class="import-copy">
-                            "Choose a Strava ZIP. It is read and parsed in this browser; activity data is not uploaded."
+                            "Choose GPX, FIT, FIT.GZ, or ZIP files. Each ZIP can include an activities.csv for exact path matching. Files are processed in this browser."
                         </p>
                     </div>
                     <label class="file-picker">
-                        <span>{move || if is_importing.get() { "Reading archive…" } else { "Choose ZIP file" }}</span>
+                        <span>{move || if is_importing.get() { "Processing files…" } else { "Choose files" }}</span>
                         <input
                             type="file"
-                            accept=".zip,application/zip"
-                            aria-label="Choose Strava ZIP file"
+                            multiple
+                            accept=".gpx,.fit,.fit.gz,.zip,application/zip"
+                            aria-label="Choose activity files or ZIP archives"
                             on:change=on_file_change
                             disabled=move || is_importing.get()
                         />
@@ -100,7 +164,7 @@ pub fn Home() -> impl IntoView {
                 <div class="import-status" aria-live="polite">
                     {move || {
                         if is_importing.get() {
-                            "Reading and parsing the selected archive in this browser.".to_string()
+                            progress.get().unwrap_or_else(|| "Processing selected files…".into())
                         } else if let Some(message) = error.get() {
                             message
                         } else if let Some(filename) = selected_filename.get() {
@@ -155,27 +219,35 @@ pub fn Home() -> impl IntoView {
     }
 }
 
-fn rows_from_report(report: ImportReport) -> Vec<ActivityTableRow> {
-    report
-        .entries
-        .into_iter()
-        .map(|outcome| match outcome {
-            ImportEntryOutcome::Imported { activity, track } => activity_row(
-                activity,
-                format!("Imported · {} points", track.points.len()),
-            ),
-            ImportEntryOutcome::MetadataOnly { activity, reason } => {
-                activity_row(activity, format!("Metadata only · {reason}"))
-            }
-            ImportEntryOutcome::Skipped { path, reason } => {
-                empty_row(path, format!("Skipped · {reason}"))
-            }
-            ImportEntryOutcome::Duplicate { path } => empty_row(path, "Duplicate activity".into()),
-            ImportEntryOutcome::Malformed { path, reason } => {
-                empty_row(path, format!("Malformed · {reason}"))
-            }
-        })
-        .collect()
+fn row_from_outcome(outcome: ImportEntryOutcome) -> ActivityTableRow {
+    match outcome {
+        ImportEntryOutcome::Reconciled { activity, track } => activity_row(
+            activity,
+            format!("Imported · {} points · matched CSV", track.points.len()),
+        ),
+        ImportEntryOutcome::TrackOnly { activity, track } => activity_row(
+            activity,
+            format!("Imported · {} points", track.points.len()),
+        ),
+        ImportEntryOutcome::MetadataOnly { activity, reason } => {
+            activity_row(activity, format!("Metadata only · {reason}"))
+        }
+        ImportEntryOutcome::Duplicate { path } => empty_row(path, "Duplicate activity".into()),
+        ImportEntryOutcome::Malformed { path, reason } => {
+            empty_row(path, format!("Malformed · {reason}"))
+        }
+    }
+}
+
+async fn yield_to_browser() {
+    let promise = js_sys::Promise::new(&mut |resolve, _reject| {
+        let Some(window) = web_sys::window() else {
+            let _ = resolve.call0(&wasm_bindgen::JsValue::NULL);
+            return;
+        };
+        let _ = window.set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, 0);
+    });
+    let _ = JsFuture::from(promise).await;
 }
 
 fn activity_row(activity: Activity, status: String) -> ActivityTableRow {
