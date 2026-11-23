@@ -278,6 +278,29 @@ body {
   vertical-align: top;
 }
 
+.activity-select-col,
+.activity-select-cell {
+  width: 48px;
+  min-width: 48px;
+  padding: 12px 8px;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.activity-map-checkbox {
+  width: 17px;
+  height: 17px;
+  margin: 0 auto;
+  accent-color: #276742;
+  cursor: pointer;
+  vertical-align: middle;
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+}
+
 .activity-table th {
   position: sticky;
   top: 0;

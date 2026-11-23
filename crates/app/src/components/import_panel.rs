@@ -1,4 +1,4 @@
-use exercise_domain::Activity;
+use exercise_domain::ActivityEntry;
 use exercise_import::{
     ImportEntryOutcome, ImportEvent, ParseOptions, ZipImportStream, parse_activity_file,
 };
@@ -7,9 +7,10 @@ use wasm_bindgen::JsCast;
 use wasm_bindgen_futures::JsFuture;
 use web_sys::{Event, File, HtmlInputElement};
 
+#[derive(Clone, Debug, PartialEq)]
 pub enum ActivityUpdate {
     Clear,
-    Append(Activity),
+    Append(ActivityEntry),
 }
 
 const MAX_UPLOAD_BYTES: u64 = 256 * 1024 * 1024;
@@ -205,10 +206,18 @@ async fn process_zip_events(file_name: &str, stream: &mut ZipImportStream<'_>, u
 
 fn emit_activity(outcome: ImportEntryOutcome, ui: &ImportUi) {
     match outcome {
-        ImportEntryOutcome::Reconciled { activity, .. }
-        | ImportEntryOutcome::TrackOnly { activity, .. }
-        | ImportEntryOutcome::MetadataOnly { activity, .. } => {
-            ui.on_activity_update.run(ActivityUpdate::Append(activity));
+        ImportEntryOutcome::Reconciled { activity, track }
+        | ImportEntryOutcome::TrackOnly { activity, track } => {
+            ui.on_activity_update.run(ActivityUpdate::Append(ActivityEntry::new(
+                activity,
+                Some(track),
+            )));
+        }
+        ImportEntryOutcome::MetadataOnly { activity, .. } => {
+            ui.on_activity_update.run(ActivityUpdate::Append(ActivityEntry::new(
+                activity,
+                None,
+            )));
         }
         ImportEntryOutcome::Duplicate { path } => {
             ui.error.set(Some(format!("Duplicate activity at {path}.")));

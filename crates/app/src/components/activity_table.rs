@@ -1,7 +1,10 @@
-use exercise_domain::{Activity, ActivityType};
+use crate::format::{OptionDisplayExt, format_distance, format_duration};
+use exercise_domain::{Activity, ActivityEntry, ActivityId, ActivityType};
+use indexmap::IndexMap;
 use leptos::prelude::*;
 
 struct ActivityTableRow {
+    id: ActivityId,
     name: String,
     timestamp: String,
     activity_type: String,
@@ -9,47 +12,78 @@ struct ActivityTableRow {
     elapsed_duration: String,
     timer_duration: String,
     status: String,
+    include_on_map: bool,
+    can_include_on_map: bool,
 }
 
-impl From<Activity> for ActivityTableRow {
-    fn from(activity: Activity) -> Self {
-        let track_status = if activity.bounds.is_some() {
+impl From<&ActivityEntry> for ActivityTableRow {
+    fn from(entry: &ActivityEntry) -> Self {
+        let can_include = entry.can_include_on_map();
+        let track_status = if can_include {
             "Track available"
         } else {
             "Metadata only"
         };
         Self {
-            name: activity.name.unwrap_or_else(|| "—".into()),
-            timestamp: activity
-                .started_at
-                .map(|time| time.to_rfc3339())
-                .unwrap_or_else(|| "—".into()),
-            activity_type: display_activity_type(&activity.activity_type),
-            distance: activity
-                .distance_meters
-                .map(format_distance)
-                .unwrap_or_else(|| "—".into()),
-            elapsed_duration: activity
+            id: entry.activity.id.clone(),
+            name: entry.activity.name.as_deref().or_dash(),
+            timestamp: entry.activity.started_at.format_or_dash(|t| t.to_rfc3339()),
+            activity_type: display_activity_type(&entry.activity.activity_type),
+            distance: entry.activity.distance_meters.format_or_dash(format_distance),
+            elapsed_duration: entry
+                .activity
                 .elapsed_duration_seconds
-                .map(format_duration)
-                .unwrap_or_else(|| "—".into()),
-            timer_duration: activity
+                .format_or_dash(format_duration),
+            timer_duration: entry
+                .activity
                 .timer_duration_seconds
-                .map(format_duration)
-                .unwrap_or_else(|| "—".into()),
+                .format_or_dash(format_duration),
             status: track_status.into(),
+            include_on_map: entry.include_on_map,
+            can_include_on_map: can_include,
         }
     }
 }
 
+impl From<ActivityEntry> for ActivityTableRow {
+    fn from(entry: ActivityEntry) -> Self {
+        Self::from(&entry)
+    }
+}
+
+impl From<&Activity> for ActivityTableRow {
+    fn from(activity: &Activity) -> Self {
+        Self::from(&ActivityEntry::new(activity.clone(), None))
+    }
+}
+
+impl From<Activity> for ActivityTableRow {
+    fn from(activity: Activity) -> Self {
+        Self::from(&activity)
+    }
+}
+
 #[component]
-pub fn ActivityTable(activities: RwSignal<Vec<Activity>>) -> impl IntoView {
+pub fn ActivityTable(
+    activities: RwSignal<IndexMap<ActivityId, ActivityEntry>>,
+) -> impl IntoView {
+    let toggle_activity = move |id: ActivityId| {
+        activities.update(|items| {
+            if let Some(entry) = items.get_mut(&id) {
+                if entry.can_include_on_map() {
+                    entry.include_on_map = !entry.include_on_map;
+                }
+            }
+        });
+    };
+
     view! {
         <Show when=move || !activities.get().is_empty()>
             <div class="activity-table-scroll" role="region" aria-label="Imported activity results" tabindex="0">
                 <table class="activity-table">
                     <thead>
                         <tr>
+                            <th scope="col" class="activity-select-col">"Map"</th>
                             <th scope="col">"Activity name"</th>
                             <th scope="col">"Timestamp"</th>
                             <th scope="col">"Activity type"</th>
@@ -60,17 +94,34 @@ pub fn ActivityTable(activities: RwSignal<Vec<Activity>>) -> impl IntoView {
                         </tr>
                     </thead>
                     <tbody>
-                        {move || activities.get().into_iter().map(ActivityTableRow::from).map(|row| view! {
-                            <tr>
-                                <td>{row.name}</td>
-                                <td>{row.timestamp}</td>
-                                <td>{row.activity_type}</td>
-                                <td>{row.distance}</td>
-                                <td>{row.elapsed_duration}</td>
-                                <td>{row.timer_duration}</td>
-                                <td class="activity-result">{row.status}</td>
-                            </tr>
-                        }).collect_view()}
+                        {move || {
+                            let map = activities.get();
+                            map.values().map(ActivityTableRow::from).map(|row| {
+                                let id = row.id.clone();
+                                let aria_label = format!("Include {} on map", row.name);
+                                view! {
+                                    <tr>
+                                        <td class="activity-select-cell">
+                                            <input
+                                                type="checkbox"
+                                                class="activity-map-checkbox"
+                                                prop:checked=row.include_on_map
+                                                disabled=!row.can_include_on_map
+                                                aria-label=aria_label
+                                                on:change=move |_| toggle_activity(id.clone())
+                                            />
+                                        </td>
+                                        <td>{row.name}</td>
+                                        <td>{row.timestamp}</td>
+                                        <td>{row.activity_type}</td>
+                                        <td>{row.distance}</td>
+                                        <td>{row.elapsed_duration}</td>
+                                        <td>{row.timer_duration}</td>
+                                        <td class="activity-result">{row.status}</td>
+                                    </tr>
+                                }
+                            }).collect_view()
+                        }}
                     </tbody>
                 </table>
             </div>
@@ -92,22 +143,4 @@ fn display_activity_type(activity_type: &ActivityType) -> String {
     }
 }
 
-fn format_distance(meters: f64) -> String {
-    if meters >= 1000.0 {
-        format!("{:.2} km", meters / 1000.0)
-    } else {
-        format!("{meters:.0} m")
-    }
-}
 
-fn format_duration(seconds: f64) -> String {
-    let seconds = seconds.max(0.0).round() as u64;
-    let hours = seconds / 3600;
-    let minutes = (seconds % 3600) / 60;
-    let remainder = seconds % 60;
-    if hours > 0 {
-        format!("{hours}:{minutes:02}:{remainder:02}")
-    } else {
-        format!("{minutes}:{remainder:02}")
-    }
-}

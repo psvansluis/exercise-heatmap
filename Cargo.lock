@@ -463,6 +463,7 @@ dependencies = [
  "console_log",
  "exercise-domain",
  "exercise-import",
+ "indexmap",
  "js-sys",
  "leptos",
  "leptos_meta",

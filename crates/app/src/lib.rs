@@ -3,6 +3,7 @@ use leptos_meta::*;
 use leptos_router::{components::*, path};
 
 mod components;
+pub mod format;
 mod pages;
 
 use crate::pages::home::Home;
