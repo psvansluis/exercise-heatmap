@@ -1,8 +1,10 @@
 use std::rc::Rc;
 
+use exercise_domain::ActivityEntry;
 use leptos::prelude::*;
 
 mod adapter;
+pub(crate) mod geojson;
 mod lifecycle;
 mod options;
 mod status;
@@ -42,6 +44,9 @@ pub fn MapLibreMap(
     /// How long to wait for tiles before declaring the map unavailable.
     #[prop(default = DEFAULT_LOAD_TIMEOUT_MS)]
     load_timeout_ms: u32,
+    /// Activity entries whose tracks should be drawn on the map.
+    #[prop(into, default = Signal::derive(|| Vec::new()))]
+    active_entries: Signal<Vec<ActivityEntry>>,
 ) -> impl IntoView {
     let map_container = NodeRef::<leptos::html::Div>::new();
     let status = RwSignal::new(MapStatus::Starting);
@@ -80,7 +85,25 @@ pub fn MapLibreMap(
         }
     });
 
-    on_cleanup(move || handle.dispose());
+    on_cleanup({
+        let handle = handle.clone();
+        move || handle.dispose()
+    });
+
+    // Reactively push track data whenever the active entries or map status change.
+    Effect::new({
+        let handle = handle;
+        move |_| {
+            let current_status = status.get();
+            let entries = active_entries.get();
+            if current_status == MapStatus::Ready {
+                if let Some(map) = handle.get_map() {
+                    let geojson = geojson::entries_to_geojson(&entries);
+                    map.set_tracks(&geojson);
+                }
+            }
+        }
+    });
 
     let ready_label = tile_service_label.clone();
 

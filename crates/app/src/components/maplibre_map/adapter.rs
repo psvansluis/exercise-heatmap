@@ -4,6 +4,7 @@ use serde_wasm_bindgen::Serializer;
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use wasm_bindgen_futures::JsFuture;
 
+use super::geojson::GeoJsonFeatureCollection;
 use super::options::MapOptions;
 
 const ADAPTER_GLOBAL: &str = "exerciseMapLibre";
@@ -68,6 +69,17 @@ impl Map {
         await_api_1("mapLoaded", &self.0)
             .await
             .map_err(|error| AdapterReason::from_js(&error))
+    }
+
+    /// Sends a GeoJSON `FeatureCollection` of tracks to the JS adapter,
+    /// which creates or updates the MapLibre source and layer.
+    pub(crate) fn set_tracks(&self, geojson: &GeoJsonFeatureCollection) {
+        if let Ok(api) = maplibre_api()
+            && let Ok(set_tracks) = api_function(&api, "setTracks")
+            && let Ok(js_data) = serde_wasm_bindgen::to_value(geojson)
+        {
+            let _ = set_tracks.call2(&api, &self.0, &js_data);
+        }
     }
 
     /// Asks the renderer to destroy the instance and settle any pending

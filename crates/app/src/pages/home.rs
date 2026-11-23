@@ -19,6 +19,31 @@ pub fn Home() -> impl IntoView {
         }
     });
 
+    // Entries whose tracks should be drawn on the map.
+    let active_entries = Signal::derive(move || {
+        activities
+            .get()
+            .values()
+            .filter(|e| e.include_on_map && e.track.is_some())
+            .cloned()
+            .collect::<Vec<_>>()
+    });
+
+    // Center on the first valid GPS coordinate across all uploaded activities
+    // (regardless of `include_on_map`). Returns None when no activity has a
+    // track with at least one valid point.
+    let first_valid_track_center = move || {
+        activities.get().values().find_map(|entry| {
+            entry.track.as_ref().and_then(|track| {
+                track
+                    .points
+                    .iter()
+                    .find(|p| p.has_valid_coordinates())
+                    .map(|p| [p.longitude, p.latitude])
+            })
+        })
+    };
+
     view! {
         <main class="page-shell">
             <header class="hero">
@@ -33,7 +58,12 @@ pub fn Home() -> impl IntoView {
 
             <ActivityTable activities=activities />
 
-            <MapLibreMap />
+            <Show when=move || first_valid_track_center().is_some()>
+                {move || {
+                    let center = first_valid_track_center().unwrap_or([4.895, 52.37]);
+                    view! { <MapLibreMap center=center active_entries=active_entries /> }
+                }}
+            </Show>
 
             <footer class="page-footer">
                 "A personal project for making exercise history easier to explore."

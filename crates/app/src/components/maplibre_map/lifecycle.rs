@@ -32,6 +32,11 @@ impl MapHandle {
         *self.map_instance.borrow_mut() = Some(map);
     }
 
+    /// Returns the live map instance, if one has been stored.
+    pub(crate) fn get_map(&self) -> Option<Map> {
+        self.map_instance.borrow().clone()
+    }
+
     pub(crate) fn is_cancelled(&self) -> bool {
         self.cancelled.get()
     }

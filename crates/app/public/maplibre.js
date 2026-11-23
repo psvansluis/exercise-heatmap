@@ -59,4 +59,47 @@ function removeMap(map) {
   map.remove();
 }
 
-globalThis.exerciseMapLibre = { createMap, mapLoaded, removeMap };
+const TRACKS_SOURCE_ID = "exercise-tracks";
+const TRACKS_LAYER_ID = "exercise-tracks-line";
+
+function setTracks(map, geojsonData) {
+  const source = map.getSource(TRACKS_SOURCE_ID);
+  if (source) {
+    source.setData(geojsonData);
+  } else {
+    map.addSource(TRACKS_SOURCE_ID, {
+      type: "geojson",
+      data: geojsonData,
+    });
+    map.addLayer({
+      id: TRACKS_LAYER_ID,
+      type: "line",
+      source: TRACKS_SOURCE_ID,
+      layout: {
+        "line-cap": "round",
+        "line-join": "round",
+      },
+      paint: {
+        "line-color": [
+          "match",
+          ["get", "activityType"],
+          "Run",
+          "#e0523c",
+          "Ride",
+          "#2564eb",
+          "Walk",
+          "#0d9489",
+          "Hike",
+          "#d97706",
+          "Swim",
+          "#0284c7",
+          "#7c3aed",
+        ],
+        "line-width": 3.5,
+        "line-opacity": 0.75,
+      },
+    });
+  }
+}
+
+globalThis.exerciseMapLibre = { createMap, mapLoaded, removeMap, setTracks };
