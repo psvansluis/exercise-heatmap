@@ -4,12 +4,14 @@ use exercise_domain::ActivityEntry;
 use leptos::prelude::*;
 
 mod adapter;
+pub mod colors;
 pub(crate) mod geojson;
 mod lifecycle;
 mod options;
 mod status;
 
 use adapter::Map;
+use colors::ActivityColors;
 use options::MapOptions;
 use status::{MapStatus, unavailable_message};
 
@@ -47,6 +49,10 @@ pub fn MapLibreMap(
     /// Activity entries whose tracks should be drawn on the map.
     #[prop(into, default = Signal::derive(|| Vec::new()))]
     active_entries: Signal<Vec<ActivityEntry>>,
+    /// Track colours by activity type; unlisted types use the palette's
+    /// fallback colour.
+    #[prop(default = ActivityColors::default())]
+    activity_colors: ActivityColors,
 ) -> impl IntoView {
     let map_container = NodeRef::<leptos::html::Div>::new();
     let status = RwSignal::new(MapStatus::Starting);
@@ -99,7 +105,7 @@ pub fn MapLibreMap(
             if current_status == MapStatus::Ready {
                 if let Some(map) = handle.get_map() {
                     let geojson = geojson::entries_to_geojson(&entries);
-                    map.set_tracks(&geojson);
+                    map.set_tracks(&geojson, &activity_colors);
                 }
             }
         }

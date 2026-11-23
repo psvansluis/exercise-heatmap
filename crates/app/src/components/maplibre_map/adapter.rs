@@ -4,6 +4,7 @@ use serde_wasm_bindgen::Serializer;
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use wasm_bindgen_futures::JsFuture;
 
+use super::colors::ActivityColors;
 use super::geojson::GeoJsonFeatureCollection;
 use super::options::MapOptions;
 
@@ -73,12 +74,15 @@ impl Map {
 
     /// Sends a GeoJSON `FeatureCollection` of tracks to the JS adapter,
     /// which creates or updates the MapLibre source and layer.
-    pub(crate) fn set_tracks(&self, geojson: &GeoJsonFeatureCollection) {
+    pub(crate) fn set_tracks(&self, geojson: &GeoJsonFeatureCollection, colors: &ActivityColors) {
         if let Ok(api) = maplibre_api()
             && let Ok(set_tracks) = api_function(&api, "setTracks")
             && let Ok(js_data) = serde_wasm_bindgen::to_value(geojson)
+            // MapLibre needs plain objects; a map would serialize as a JS Map.
+            && let Ok(js_colors) = colors
+                .serialize(&Serializer::new().serialize_maps_as_objects(true))
         {
-            let _ = set_tracks.call2(&api, &self.0, &js_data);
+            let _ = set_tracks.call3(&api, &self.0, &js_data, &js_colors);
         }
     }
 

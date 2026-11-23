@@ -27,7 +27,7 @@ pub(crate) struct GeoJsonProperties {
     pub activity_type: String,
 }
 
-fn activity_type_label(t: &ActivityType) -> String {
+pub(crate) fn activity_type_label(t: &ActivityType) -> String {
     match t {
         ActivityType::Run => "Run".into(),
         ActivityType::Walk => "Walk".into(),
@@ -127,10 +127,7 @@ mod tests {
 
     #[test]
     fn coordinates_are_lon_lat_order() {
-        let track = sample_track(
-            "1",
-            vec![point(52.37, 4.89), point(52.38, 4.90)],
-        );
+        let track = sample_track("1", vec![point(52.37, 4.89), point(52.38, 4.90)]);
         let entry = ActivityEntry::new(sample_activity("1", ActivityType::Run), Some(track));
         let result = entries_to_geojson(&[entry]);
 
@@ -180,14 +177,8 @@ mod tests {
 
     #[test]
     fn properties_contain_correct_activity_id_and_type() {
-        let track = sample_track(
-            "run-42",
-            vec![point(52.37, 4.89), point(52.38, 4.90)],
-        );
-        let entry = ActivityEntry::new(
-            sample_activity("run-42", ActivityType::Ride),
-            Some(track),
-        );
+        let track = sample_track("run-42", vec![point(52.37, 4.89), point(52.38, 4.90)]);
+        let entry = ActivityEntry::new(sample_activity("run-42", ActivityType::Ride), Some(track));
         let result = entries_to_geojson(&[entry]);
 
         let props = &result.features[0].properties;

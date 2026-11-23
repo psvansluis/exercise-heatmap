@@ -208,16 +208,15 @@ fn emit_activity(outcome: ImportEntryOutcome, ui: &ImportUi) {
     match outcome {
         ImportEntryOutcome::Reconciled { activity, track }
         | ImportEntryOutcome::TrackOnly { activity, track } => {
-            ui.on_activity_update.run(ActivityUpdate::Append(ActivityEntry::new(
-                activity,
-                Some(track),
-            )));
+            ui.on_activity_update
+                .run(ActivityUpdate::Append(ActivityEntry::new(
+                    activity,
+                    Some(track),
+                )));
         }
         ImportEntryOutcome::MetadataOnly { activity, .. } => {
-            ui.on_activity_update.run(ActivityUpdate::Append(ActivityEntry::new(
-                activity,
-                None,
-            )));
+            ui.on_activity_update
+                .run(ActivityUpdate::Append(ActivityEntry::new(activity, None)));
         }
         ImportEntryOutcome::Duplicate { path } => {
             ui.error.set(Some(format!("Duplicate activity at {path}.")));

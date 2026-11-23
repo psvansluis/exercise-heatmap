@@ -29,7 +29,10 @@ impl From<&ActivityEntry> for ActivityTableRow {
             name: entry.activity.name.as_deref().or_dash(),
             timestamp: entry.activity.started_at.format_or_dash(|t| t.to_rfc3339()),
             activity_type: display_activity_type(&entry.activity.activity_type),
-            distance: entry.activity.distance_meters.format_or_dash(format_distance),
+            distance: entry
+                .activity
+                .distance_meters
+                .format_or_dash(format_distance),
             elapsed_duration: entry
                 .activity
                 .elapsed_duration_seconds
@@ -64,9 +67,7 @@ impl From<Activity> for ActivityTableRow {
 }
 
 #[component]
-pub fn ActivityTable(
-    activities: RwSignal<IndexMap<ActivityId, ActivityEntry>>,
-) -> impl IntoView {
+pub fn ActivityTable(activities: RwSignal<IndexMap<ActivityId, ActivityEntry>>) -> impl IntoView {
     let toggle_activity = move |id: ActivityId| {
         activities.update(|items| {
             if let Some(entry) = items.get_mut(&id) {
@@ -142,5 +143,3 @@ fn display_activity_type(activity_type: &ActivityType) -> String {
         ActivityType::Other(raw) => raw.clone(),
     }
 }
-
-

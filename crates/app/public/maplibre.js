@@ -62,7 +62,14 @@ function removeMap(map) {
 const TRACKS_SOURCE_ID = "exercise-tracks";
 const TRACKS_LAYER_ID = "exercise-tracks-line";
 
-function setTracks(map, geojsonData) {
+// colors is a plain object produced in Rust:
+// { colors: { "<activityType>": "#rrggbb", ... }, default: "#rrggbb" }.
+function trackColorExpression(colors) {
+  const cases = Object.entries(colors.colors).flat();
+  return ["match", ["get", "activityType"], ...cases, colors.default];
+}
+
+function setTracks(map, geojsonData, colors) {
   const source = map.getSource(TRACKS_SOURCE_ID);
   if (source) {
     source.setData(geojsonData);
@@ -80,21 +87,7 @@ function setTracks(map, geojsonData) {
         "line-join": "round",
       },
       paint: {
-        "line-color": [
-          "match",
-          ["get", "activityType"],
-          "Run",
-          "#e0523c",
-          "Ride",
-          "#2564eb",
-          "Walk",
-          "#0d9489",
-          "Hike",
-          "#d97706",
-          "Swim",
-          "#0284c7",
-          "#7c3aed",
-        ],
+        "line-color": trackColorExpression(colors),
         "line-width": 3.5,
         "line-opacity": 0.75,
       },

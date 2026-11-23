@@ -16,7 +16,7 @@ pub enum ActivitySource {
 }
 
 /// A normalized activity category, preserving provider values not yet mapped.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum ActivityType {
     Run,
     Walk,
